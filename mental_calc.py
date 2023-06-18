@@ -1,5 +1,6 @@
 from datetime import datetime
 import random, os, sys
+from highscore import Highscore, Score
 
 
 # The function and the class taken from https://stackoverflow.com/a/73917459/576794
@@ -7,22 +8,25 @@ def color_text(text, rgb):
     r, g, b = rgb
     return f"\033[38;2;{r};{g};{b}m{text}\033[0m"
 
-
 class rgb:
     RED = (255, 0, 0)
     GREEN = (0, 255, 0)
     YELLOW = (255, 255, 0)
     WHITE = (255, 255, 255)
 
+def clear():
+    os.system("cls" if os.name == "nt" else "echo -e \\\\033c")
 
-os.system("cls" if os.name == "nt" else "echo -e \\\\033c")
+clear()
+name = input("What's your name? ")
+clear();
 
 number_questions = 25
 if len(sys.argv) > 1:
     number_questions = int(sys.argv[1])
 
 print(
-    color_text("You will have to answer ", rgb.WHITE)
+    color_text(f"Hi {name}! You will have to answer ", rgb.WHITE)
     + color_text(f"{number_questions} questions\n", rgb.YELLOW)
 )
 motivation_quotes = [
@@ -108,6 +112,21 @@ print(
 )
 
 if mistakes / number_questions > 0.1 or duration / number_questions > 5:
-    print(color_text("You should practice more!\n", rgb.RED))
+    print(color_text("You should practice more!", rgb.RED))
 else:
-    print(color_text("You scored well! Congratulations!\n", rgb.GREEN))
+    print(color_text("You scored well! Congratulations!", rgb.GREEN))
+
+
+hs = Highscore();
+hs.load()
+
+hs.add(Score(name,duration,number_questions,mistakes))
+
+print(color_text("\n\n\n=== ",rgb.YELLOW)+color_text("Leader board",rgb.WHITE)+color_text(" ===\n",rgb.YELLOW))
+for i,j in enumerate(hs.get()):
+    print(color_text(f"{i+1}. ",rgb.YELLOW)+ color_text(f"{j.name} {j.score()} ",rgb.WHITE))
+    if i>=4:
+        break
+hs.save()
+
+print()
