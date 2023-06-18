@@ -1,7 +1,5 @@
 from datetime import datetime
-import random, os
-
-os.system("cls" if os.name == "nt" else "echo -e \\\\033c")
+import random, os, sys
 
 
 # The function and the class taken from https://stackoverflow.com/a/73917459/576794
@@ -17,6 +15,16 @@ class rgb:
     WHITE = (255, 255, 255)
 
 
+os.system("cls" if os.name == "nt" else "echo -e \\\\033c")
+
+number_questions = 25
+if len(sys.argv) > 1:
+    number_questions = int(sys.argv[1])
+
+print(
+    color_text("You will have to answer ", rgb.WHITE)
+    + color_text(f"{number_questions} questions\n", rgb.YELLOW)
+)
 motivation_quotes = [
     "Great work!",
     "Excellent!",
@@ -65,7 +73,7 @@ for i in range(0, 10):
             question_bank.append((o, i + 10 - j))
 
 start = datetime.now()
-number_questions = 25
+
 mistakes = 0
 
 for i in range(0, number_questions):
@@ -76,7 +84,7 @@ for i in range(0, number_questions):
         success = True
         try:
             if q[1] == int(a):
-                print(color_text(random.choice(motivation_quotes) + "\n", rgb.GREEN))
+                print(color_text(random.choice(motivation_quotes) + "\n", rgb.WHITE))
                 break
             else:
                 success = False
@@ -91,12 +99,12 @@ for i in range(0, number_questions):
 
 duration = int(round((datetime.now() - start).total_seconds()))
 print(
-    color_text(f"You completed the game in ", rgb.YELLOW)
-    + color_text(f"{duration} seconds", rgb.WHITE)
+    color_text(f"You completed the game in ", rgb.WHITE)
+    + color_text(f"{duration} seconds", rgb.YELLOW)
 )
 print(
-    color_text(f"Number of mistakes: ", rgb.YELLOW)
-    + color_text(f"{mistakes}\n", rgb.WHITE)
+    color_text(f"Number of mistakes: ", rgb.WHITE)
+    + color_text(f"{mistakes}\n", rgb.YELLOW)
 )
 
 if mistakes / number_questions > 0.1 or duration / number_questions > 5:
