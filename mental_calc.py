@@ -39,15 +39,15 @@ for i in range(0,10):
     for j in range(1,10):
         if (i != 0): # generate the addition
             o=f"{j} + {i}"
-            question_bank.append(o)
+            question_bank.append((o,j+i))
         if i == j: # zero
             continue
         if i > j and i != 0:
             o=f"{i} - {j}"
-            question_bank.append(o)
+            question_bank.append((o,i-j))
         else:
             o=f"{i+10} - {j}"
-            question_bank.append(o)
+            question_bank.append((o,i+10-j))
 
 start = datetime.now()
 number_questions=25
@@ -55,9 +55,9 @@ number_questions=25
 for i in range(0,number_questions):
     q=random.choice(question_bank)
     while True:
-        a=input(f"{q} = ")
+        a=input(f"{q[0]} = ")
         try:
-            if (eval(q) == int(a)):
+            if (q[1] == int(a)):
                 print(random.choice(motivation_quotes)+'\n')
                 break
             else:
