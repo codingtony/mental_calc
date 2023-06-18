@@ -65,11 +65,12 @@ for i in range(0, 10):
             question_bank.append((o, i + 10 - j))
 
 start = datetime.now()
-number_questions = 5
+number_questions = 25
 mistakes = 0
 
 for i in range(0, number_questions):
     q = random.choice(question_bank)
+    new_question = True
     while True:
         a = input(color_text(f"{q[0]} = ", rgb.WHITE))
         success = True
@@ -81,9 +82,12 @@ for i in range(0, number_questions):
                 success = False
         except:
             success = False
+
         if not success:
-            mistakes += 1
+            if new_question:
+                mistakes += 1
             print(color_text(random.choice(wrong_answer_messages) + "\n", rgb.RED))
+        new_question = False
 
 duration = int(round((datetime.now() - start).total_seconds()))
 print(
