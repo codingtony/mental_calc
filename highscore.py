@@ -19,12 +19,17 @@ class Score:
         return int(round(score,0))
 
 class Highscore:
-    def __init__(self):
-        self.highscores = []  
+    def __init__(self,number_questions):
+        self.number_questions = number_questions
+        self.highscores = {}
+        self.highscores[number_questions] = []
+
     
     def add(self,score):
-        self.highscores.append(score)
-        self.highscores.sort(reverse=True)
+        list = self.highscores.get(self.number_questions,[])
+        list.append(score)
+        list.sort(reverse=True)
+        self.highscores[self.number_questions] = list
     
     def save(self):
         with open('highscore.data', 'wb') as f:
@@ -36,4 +41,4 @@ class Highscore:
         except FileNotFoundError:
             pass
     def get(self):
-        return self.highscores
+        return self.highscores[self.number_questions]

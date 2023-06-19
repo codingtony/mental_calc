@@ -117,14 +117,14 @@ else:
     print(color_text("You scored well! Congratulations!", rgb.GREEN))
 
 
-hs = Highscore();
+hs = Highscore(number_questions);
 hs.load()
 
 hs.add(Score(name,duration,number_questions,mistakes))
 
-print(color_text("\n\n\n=== ",rgb.YELLOW)+color_text("Leader board",rgb.WHITE)+color_text(" ===\n",rgb.YELLOW))
+print(color_text("\n\n\n=== ",rgb.YELLOW)+color_text(f"Leader board for {number_questions} questions",rgb.WHITE)+color_text(" ===\n",rgb.YELLOW))
 for i,j in enumerate(hs.get()):
-    print(color_text(f"{i+1}. ",rgb.YELLOW)+ color_text(f"{j.name} {j.score()} ",rgb.WHITE))
+    print(color_text(f"{i+1}. ",rgb.YELLOW)+ color_text(f"{j.name} {j.seconds}s, {j.mistakes} mistakes, {j.time.strftime('%Y-%m-%d %H:%M:%S')} ",rgb.WHITE))
     if i>=4:
         break
 hs.save()
