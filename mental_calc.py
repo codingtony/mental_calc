@@ -21,7 +21,7 @@ clear()
 name = input("What's your name? ")
 clear();
 
-number_questions = 25
+number_questions = 50
 if len(sys.argv) > 1:
     number_questions = int(sys.argv[1])
 
@@ -96,7 +96,7 @@ for i in range(0, number_questions):
             success = False
 
         if not success:
-            if new_question:
+            if new_question: # to prevent double counting mistakes
                 mistakes += 1
             print(color_text(random.choice(wrong_answer_messages) + "\n", rgb.RED))
         new_question = False
@@ -111,7 +111,7 @@ print(
     + color_text(f"{mistakes}\n", rgb.YELLOW)
 )
 
-if mistakes / number_questions > 0.1 or duration / number_questions > 5:
+if mistakes / number_questions > 0.1 or duration / number_questions > 6:
     print(color_text("You should practice more!", rgb.RED))
 else:
     print(color_text("You scored well! Congratulations!", rgb.GREEN))
