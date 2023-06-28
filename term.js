@@ -1,6 +1,6 @@
 function initTerm(game) {
     var term = new Terminal();
-    term.open(document.getElementById("terminal"));
+    term.open(document.getElementById("terminal-div"));
     
     function colorText(r, g, b) {
       return (text,reset=true) => {
@@ -42,8 +42,9 @@ function initTerm(game) {
     }
     
     const controller = {
+       
         initPrompt: () => {
-            return WHITE("What's your name ? ")+YELLOW("",false)
+            return WHITE(`You will have to answer ${game.numQuestions} questions are you ready to start?`)+YELLOW("",false)
         },
         prompt: () => {
            return GREEN("1 + 1 =") + " ";

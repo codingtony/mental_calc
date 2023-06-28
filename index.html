@@ -7,21 +7,13 @@
     <title>Mental Calc</title>
     <link rel="stylesheet" href="https://unpkg.com/xterm@5.2.0/css/xterm.css" />
     <link rel="stylesheet" href="style.css" />
-    
-
   </head>
   <body>
-    <h1>Welcome to Mental Math!</h1>
-    <div id="questions">
+    <form id="questions">
+      <h1>Welcome to Mental Math!</h1>
       <div>
         <label for="name">Name:</label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          value=""
-          required
-        />
+        <input type="text" id="name" name="name" value="" required />
       </div>
       <div>
         <label for="numQuestions">Number of Questions:</label>
@@ -34,11 +26,11 @@
         />
       </div>
       <div>
-        <input type="submit" value="Start!" />
+        <button type="submit" id="start-btn">Start!</button>
       </div>
-    </div>
+    </form>
 
-    <div class="hidden" id="terminal"></div>
+    <div class="hidden" id="terminal-div"></div>
     <script src="https://unpkg.com/xterm@5.2.0/lib/xterm.js"></script>
     <script src="game.js"></script>
     <script src="term.js"></script>

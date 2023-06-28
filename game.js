@@ -36,6 +36,9 @@ class Game  {
     #question_bank = []
     
     initGame() {
+        this.elapsedMs=0
+        this.score=0
+        this.mistakes=0
         for (let i = 0; i < 10; i++) {
             for (let j = 1; j < 10; j++) {
               if (i !== 0) {
@@ -64,9 +67,21 @@ class Game  {
         }
         return questions
     }
+    start() {
+        this.startTime=Date.now()
+    }
+    end() {
+        const millis = Date.now()-this.startTime
+        const minutes = Math.floor(millis / 60000);
+        const seconds = ((millis % 60000) / 1000).toFixed(0);
+        this.elapsedMs = millis
+        this.elapsedTime = minutes + ":" + (seconds < 10 ? '0' : '') + seconds;
+    }
 
 }
 
 const game = new Game("Sasha")
 console.log(game)
+game.start()
 console.log(game.getQuestionAnswer())
+game.end()
