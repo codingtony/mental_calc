@@ -1,16 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>Mental Calc</title>
-  <link rel="stylesheet" href="https://unpkg.com/xterm@5.2.0/css/xterm.css" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Mental Calc</title>
+    <link rel="stylesheet" href="https://unpkg.com/xterm@5.2.0/css/xterm.css" />
+    <link rel="stylesheet" href="style.css" />
+    
 
-</head>
-<body>
-    <div id="terminal"></div>  
+  </head>
+  <body>
+    <h1>Welcome to Mental Math!</h1>
+    <div id="questions">
+      <div>
+        <label for="name">Name:</label>
+        <input
+          type="text"
+          id="name"
+          name="name"
+          value=""
+          required
+        />
+      </div>
+      <div>
+        <label for="numQuestions">Number of Questions:</label>
+        <input
+          type="number"
+          id="numQuestions"
+          name="numQuestions"
+          value="50"
+          required
+        />
+      </div>
+      <div>
+        <input type="submit" value="Start!" />
+      </div>
+    </div>
+
+    <div class="hidden" id="terminal"></div>
     <script src="https://unpkg.com/xterm@5.2.0/lib/xterm.js"></script>
-    <script src="mental_calc.js"></script>
-</body>
+    <script src="game.js"></script>
+    <script src="term.js"></script>
+    <script src="main.js"></script>
+  </body>
 </html>
