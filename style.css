@@ -10,6 +10,33 @@
     line-height: 1.4;
   }
 
+  .maindiv {
+    width: 30%;
+    margin: 0 auto; /* Centers the form horizontally */
+  }
+  
+  .maindiv h1 {
+    text-align: center; /* Centers the heading horizontally */
+  }
+
+  .maindiv div {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+  }
+
+  #result p {
+    text-align: center;
+  }
+  .good {
+    color: #00FF00;
+  }
+
+  .bad {
+    color: red;
+  }
+
+
   input[type="text"],
   input[type="number"] {
     background-color: black;

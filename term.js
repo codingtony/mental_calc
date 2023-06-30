@@ -16,9 +16,9 @@ RETURN = "\r\n";
 
 function initTerm(controller) {
   var term = new Terminal();
-  const termDiv = document.getElementById("terminal-div")
-  termDiv.innerHTML = '';
-  
+  const termDiv = document.getElementById("terminal-div");
+  termDiv.innerHTML = "";
+
   term.open(termDiv);
   term.focus();
 
@@ -53,43 +53,55 @@ class Controller {
   constructor(game, completionCallback) {
     this.#game = game;
     this.#started = false;
-    this.#completionCallback = completionCallback
+    this.#completionCallback = completionCallback;
     this.#nextQuestion = this.#game.next();
     this.#nextPrompt = WHITE(this.#nextQuestion[1][0] + " = ");
   }
   #quetions = [];
   #game = null;
-  #started = false
-  #nextQuestion =null
-  #nextPrompt = null
-  #completionCallback = null
-
+  #started = false;
+  #nextQuestion = null;
+  #nextPrompt = null;
+  #completionCallback = null;
 
   initPrompt() {
-    return WHITE(
-      `You will have to answer ${
-        this.#game.numQuestions
-      } questions press enter to start`
+    return (
+      WHITE("You will have to answer ") +
+      YELLOW(this.#game.numQuestions) +
+      WHITE(" questions.") +
+      RETURN +
+      WHITE("To win you will have to answer all questions under ") +
+      YELLOW(this.#game.secsToString(this.#game.expectedTimeToCompletion())) +
+      WHITE(".") +
+      RETURN +
+      WHITE("Press RETURN to start.")
     );
   }
   prompt() {
     return this.#nextPrompt;
   }
+  
   data(data) {
     let answer = data.join("");
     if (!this.#started) {
       this.#started = true;
+      this.#game.start()
     } else {
       if (!this.#game.checkAnswer(answer)) {
         this.#nextPrompt =
-          RED("Bad") + RETURN + WHITE(this.#nextQuestion[1][0] + " = ");
+          RED(this.#game.getWrongAnswerMessage()) +
+          RETURN +
+          WHITE(this.#nextQuestion[1][0] + " = ");
       } else {
         this.#nextQuestion = this.#game.next();
         if (this.#nextQuestion === undefined) {
-          this.#completionCallback()
+          this.#game.end()
+          this.#completionCallback();
         } else {
           this.#nextPrompt =
-            WHITE("Good") + RETURN + WHITE(this.#nextQuestion[1][0] + " = ");
+            WHITE(this.#game.getRightAnswerMessage()) +
+            RETURN +
+            WHITE(this.#nextQuestion[1][0] + " = ");
         }
       }
     }

@@ -4,7 +4,7 @@ class Game {
     this.numQuestions = numQuestions;
     this.initGame();
   }
-  #firstTime = true
+  #firstTime = true;
 
   #motivation_quotes = [
     "Great work!",
@@ -64,35 +64,62 @@ class Game {
       let randomIndex = Math.floor(Math.random() * this.#question_bank.length);
       questions.push(this.#question_bank[randomIndex]);
     }
-    this.questionsIt=questions.entries()
+    this.questionsIt = questions.entries();
   }
 
   next() {
-    this.currentQuestion = this.questionsIt.next().value
-    this.#firstTime=true
-    return this.currentQuestion
+    this.currentQuestion = this.questionsIt.next().value;
+    this.#firstTime = true;
+    return this.currentQuestion;
+  }
+  getWrongAnswerMessage() {
+    let randomIndex = Math.floor(
+      Math.random() * this.#wrong_answer_messages.length
+    );
+    return this.#wrong_answer_messages[randomIndex];
+  }
+  getRightAnswerMessage() {
+    let randomIndex = Math.floor(
+      Math.random() * this.#motivation_quotes.length
+    );
+    return this.#motivation_quotes[randomIndex];
   }
 
   checkAnswer(answer) {
-    const check=parseInt(answer,10) === parseInt(this.currentQuestion[1][1])
+    const check = parseInt(answer, 10) === parseInt(this.currentQuestion[1][1]);
     if (!check) {
-        if (this.#firstTime) {
-            this.mistakes++;
-        }
-        this.#firstTime=false
+      if (this.#firstTime) {
+        this.mistakes++;
+      }
+      this.#firstTime = false;
     }
-    return check
+    return check;
   }
-
 
   start() {
     this.startTime = Date.now();
   }
-  end() {
-    const millis = Date.now() - this.startTime;
+
+  #msToString(millis) {
     const minutes = Math.floor(millis / 60000);
     const seconds = ((millis % 60000) / 1000).toFixed(0);
+    return minutes + " min " + (seconds < 10 ? "0" : "") + seconds + " sec";
+  }
+  secsToString(secs) {
+    return this.#msToString(1000*secs)
+  }
+
+  expectedTimeToCompletion() {
+    return this.numQuestions*5
+  }
+
+  hasWon() {
+    return (this.elapsedMs < this.expectedTimeToCompletion()*1000)
+  }
+  
+  end() {
+    const millis = Date.now() - this.startTime;
     this.elapsedMs = millis;
-    this.elapsedTime = minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+    this.elapsedTime = this.#msToString(millis)
   }
 }
