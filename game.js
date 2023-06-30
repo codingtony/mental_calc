@@ -4,6 +4,8 @@ class Game {
     this.numQuestions = numQuestions;
     this.initGame();
   }
+  #firstTime = true
+
   #motivation_quotes = [
     "Great work!",
     "Excellent!",
@@ -66,7 +68,20 @@ class Game {
   }
 
   next() {
-    return this.questionsIt.next()
+    this.currentQuestion = this.questionsIt.next().value
+    this.#firstTime=true
+    return this.currentQuestion
+  }
+
+  checkAnswer(answer) {
+    const check=parseInt(answer,10) === parseInt(this.currentQuestion[1][1])
+    if (!check) {
+        if (this.#firstTime) {
+            this.mistakes++;
+        }
+        this.#firstTime=false
+    }
+    return check
   }
 
 

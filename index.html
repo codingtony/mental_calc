@@ -25,6 +25,7 @@
           id="numQuestions"
           name="numQuestions"
           value="50"
+          min="1"
           required
         />
       </div>
@@ -34,6 +35,18 @@
     </form>
 
     <div class="hidden" id="terminal-div"></div>
+    <div class="hidden" id="leaderboard">
+        <h1>Results</h1>
+        <div id="result">
+            
+        </div>
+        <div id="leaderboard">
+            
+        </div>
+        <div>
+            <button id="again-btn">Play again!</button>
+        </div>
+    </div>
     <script src="https://unpkg.com/xterm@5.2.0/lib/xterm.js"></script>
     <script src="game.js"></script>
     <script src="term.js"></script>

@@ -1,3 +1,20 @@
 .hidden {
     display: none;
   }
+
+  body {
+    background-color: black;
+    color: white;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  input[type="text"],
+  input[type="number"] {
+    background-color: black;
+    color: white;
+    border: 1px solid white;
+    padding: 5px;
+    font-family: 'Courier New', Courier, monospace;
+  }
