@@ -80,12 +80,12 @@ class Controller {
   prompt() {
     return this.#nextPrompt;
   }
-  
+
   data(data) {
     let answer = data.join("");
     if (!this.#started) {
       this.#started = true;
-      this.#game.start()
+      this.#game.start();
     } else {
       if (!this.#game.checkAnswer(answer)) {
         this.#nextPrompt =
@@ -95,7 +95,7 @@ class Controller {
       } else {
         this.#nextQuestion = this.#game.next();
         if (this.#nextQuestion === undefined) {
-          this.#game.end()
+          this.#game.end();
           this.#completionCallback();
         } else {
           this.#nextPrompt =
