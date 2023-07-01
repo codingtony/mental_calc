@@ -183,7 +183,6 @@ class Score {
     const minute = String(date.getMinutes()).padStart(2, '0');
     const second = String(date.getSeconds()).padStart(2, '0');
     const formattedDate = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-    
     return formattedDate;
   }
 }
