@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Mental Calc</title>
+    <link rel="stylesheet" href="https://unpkg.com/xterm@5.2.0/css/xterm.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <form id="questions" class="maindiv">
+      <h1>Welcome to Mental Math!</h1>
+      <div>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" value="" required />
+      </div>
+      <div>
+        <label for="numQuestions">Number of Questions:</label>
+        <input
+          type="number"
+          id="numQuestions"
+          name="numQuestions"
+          value="50"
+          min="1"
+          required
+        />
+      </div>
+      <div>
+        <button type="submit" id="start-btn">Start!</button>
+      </div>
+    </form>
+
+    <div class="hidden" id="terminal-div"></div>
+    <div class="hidden" id="finish">
+      <div>
+        <h1>Results</h1>
+        <div id="result"></div>
+        <div id="leaderboard">
+          <h1>Leaderboard</h1>
+          <ul id="leaderboard-list"></ul>
+        </div>
+        <div>
+          <button id="again-btn">Play again!</button>
+        </div>
+      </div>
+    </div>
+    <script src="https://unpkg.com/xterm@5.2.0/lib/xterm.js"></script>
+    <script src="game.js"></script>
+    <script src="term.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
