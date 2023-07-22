@@ -42,6 +42,7 @@ window.onload = function () {
 
       const leaderboardData = game.getHighscore();
       const leaderboardList = document.getElementById("leaderboard-list");
+      leaderboardList.innerHTML = ''
       const options = {
         year: "numeric",
         month: "numeric",
