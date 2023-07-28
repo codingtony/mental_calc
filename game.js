@@ -82,7 +82,7 @@ class Game {
       for (let i = 2; i <= 10; i++) {
         for (let j = i; j <= 10; j++) {
           let m = i * j;
-          let o = `${m} ÷ ${i}`;
+          let o = `${m} / ${i}`;
           let a = m / i;
           this.#question_bank.push([o, a]);
           o = `${i} x ${j}`;
@@ -90,7 +90,7 @@ class Game {
           this.#question_bank.push([o, a]);
 
           if (i != j) {
-            let o = `${m} ÷ ${j}`;
+            let o = `${m} / ${j}`;
             let a = m / j;
             this.#question_bank.push([o, a]);
             o = `${j} x ${i}`;
