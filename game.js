@@ -45,28 +45,62 @@ class Game {
   #question_bank = [];
 
   initGame() {
+    const url = new URL(window.location.href);
+    const mode = Number(url.searchParams.get('m')) || 1;
+    console.log(mode)
     this.elapsedMs = 0;
     this.score = 0;
     this.finish = false;
     this.mistakes = 0;
-    for (let i = 0; i < 10; i++) {
-      for (let j = 1; j < 10; j++) {
-        if (i !== 0) {
-          let o = j + " + " + i;
-          this.#question_bank.push([o, j + i]);
-        }
-        if (i === j) {
-          continue;
-        }
-        if (i > j && i !== 0) {
-          let o = i + " - " + j;
-          this.#question_bank.push([o, i - j]);
-        } else {
-          let o = i + 10 + " - " + j;
-          this.#question_bank.push([o, i + 10 - j]);
+    let includeAddSub = (mode & 1) === 1;
+    let includeMultDiv = (mode & 2) === 2;
+
+
+    if (includeAddSub) {
+      console.log("Include Additions and Substractions")
+      for (let i = 0; i < 10; i++) {
+        for (let j = 1; j < 10; j++) {
+          if (i !== 0) {
+            let o = j + " + " + i;
+            this.#question_bank.push([o, j + i]);
+          }
+          if (i === j) {
+            continue;
+          }
+          if (i > j && i !== 0) {
+            let o = i + " - " + j;
+            this.#question_bank.push([o, i - j]);
+          } else {
+            let o = i + 10 + " - " + j;
+            this.#question_bank.push([o, i + 10 - j]);
+          }
         }
       }
     }
+    if (includeMultDiv) {
+      console.log("Include Multiplications and Divisions")
+      for (let i = 2; i <= 10; i++) {
+        for (let j = i; j <= 10; j++) {
+          let m = i * j;
+          let o = `${m} ÷ ${i}`;
+          let a = m / i;
+          this.#question_bank.push([o, a]);
+          o = `${i} x ${j}`;
+          a = i * j;
+          this.#question_bank.push([o, a]);
+
+          if (i != j) {
+            let o = `${m} ÷ ${j}`;
+            let a = m / j;
+            this.#question_bank.push([o, a]);
+            o = `${j} x ${i}`;
+            a = j * i;
+            this.#question_bank.push([o, a]);
+          }
+        }
+      }
+    }
+    console.log("Number of questions in the bank", this.#question_bank.length)
     let questions = [];
     for (let i = 0; i < this.numQuestions; i++) {
       let randomIndex = Math.floor(Math.random() * this.#question_bank.length);
