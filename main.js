@@ -53,7 +53,7 @@ window.onload = function () {
         .sort((a, b) => {
           return a.valueOf() - b.valueOf();
         })
-        .reverse()
+        .reverse().filter(s=>s.mode === game.mode)
         .forEach((entry, index) => {
           if (index < 10) {
             const listItem = document.createElement("li");

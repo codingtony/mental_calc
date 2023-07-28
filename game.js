@@ -8,8 +8,11 @@ class Game {
   constructor(name, numQuestions = 50) {
     this.name = name;
     this.numQuestions = numQuestions;
-    this.initGame();
     this.levelHighscore = [];
+    const url = new URL(window.location.href);
+    this.mode = Number(url.searchParams.get('m')) || 1;
+    console.log(this.mode)
+    this.initGame();
   }
   #firstTime = true;
 
@@ -45,15 +48,13 @@ class Game {
   #question_bank = [];
 
   initGame() {
-    const url = new URL(window.location.href);
-    const mode = Number(url.searchParams.get('m')) || 1;
-    console.log(mode)
     this.elapsedMs = 0;
     this.score = 0;
     this.finish = false;
     this.mistakes = 0;
-    let includeAddSub = (mode & 1) === 1;
-    let includeMultDiv = (mode & 2) === 2;
+    let includeAddSub = (this.mode & 1) === 1;
+    let includeMultDiv = (this.mode & 2) === 2;
+    console.log(`mode:${this.mode}`)
 
 
     if (includeAddSub) {
@@ -182,7 +183,7 @@ class Game {
       });
     }
     levelHighscore.push(
-      new Score(this.name, this.elapsedMs, this.numQuestions, this.mistakes)
+      new Score(this.name, this.elapsedMs, this.numQuestions, this.mistakes, this.mode)
     );
     highscore[this.numQuestions] = levelHighscore;
     localStorage.setItem("highscore", JSON.stringify(highscore));
@@ -191,7 +192,7 @@ class Game {
 }
 
 class Score {
-  constructor(name, elapsedMs, numQuestions, mistakes) {
+  constructor(name, elapsedMs, numQuestions, mistakes,mode=1) {
     this.name = name;
     this.elapsedMs = elapsedMs;
     this.numQuestions = numQuestions;
@@ -200,6 +201,7 @@ class Score {
     this.timestamp = Date.now();
     this.valueOf = this.#valueOf;
     this.elapsed = msToString(this.elapsedMs);
+    this.mode = mode
   }
 
   #valueOf() {
