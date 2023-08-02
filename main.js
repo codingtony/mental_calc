@@ -42,17 +42,28 @@ window.onload = function () {
 
       const leaderboardData = game.getHighscore();
       const leaderboardList = document.getElementById("leaderboard-list");
-      leaderboardList.innerHTML = ''
+     
       const options = {
         year: "numeric",
         month: "numeric",
         day: "numeric",
         hour12: false,
       };
-      leaderboardData
-        .sort((a, b) => {
-          return a.valueOf() - b.valueOf();
-        })
+      const leaderboardTitle = document.getElementById("leaderboard-title");
+
+      const sortByScore = (a, b) => {
+        return a.valueOf() - b.valueOf();
+      };
+      const sortByTime = (a, b) => {
+        return a.timestamp - b.timestamp;
+      };
+
+      let sortFunction=sortByTime
+
+      const leaderboardDisplay = (sortFunction) => {
+        leaderboardList.innerHTML = ''
+        leaderboardData
+        .sort(sortFunction)
         .reverse().filter(s=>s.mode === game.mode)
         .forEach((entry, index) => {
           if (index < 10) {
@@ -62,7 +73,24 @@ window.onload = function () {
             } - Time: ${entry.elapsed} - ${entry.when()}`;
             leaderboardList.appendChild(listItem);
           }
-        });
+        });}
+
+
+      leaderboardTitle.addEventListener('click',()=>{
+        if (sortFunction === sortByTime) {
+          leaderboardTitle.textContent="High scores"
+          sortFunction=sortByScore
+        } else {
+          leaderboardTitle.textContent="Last games"
+          sortFunction=sortByTime
+        }
+        leaderboardDisplay(sortFunction);
+      })
+
+      leaderboardDisplay(sortFunction);
+
+
+
       const resultDiv = document.getElementById("result");
       resultDiv.innerHTML = "";
 
