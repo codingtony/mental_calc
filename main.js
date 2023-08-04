@@ -61,12 +61,16 @@ window.onload = function () {
       let sortFunction=sortByTime
 
       const leaderboardDisplay = (sortFunction) => {
+        let top = 3
+        if (sortFunction === sortByScore) {
+          top = 10
+        }
         leaderboardList.innerHTML = ''
         leaderboardData
         .sort(sortFunction)
         .reverse().filter(s=>s.mode === game.mode)
         .forEach((entry, index) => {
-          if (index < 10) {
+          if (index < top) {
             const listItem = document.createElement("li");
             listItem.textContent = `${entry.name} - Mistakes: ${
               entry.mistakes
