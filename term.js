@@ -29,7 +29,11 @@ function initTerm(controller) {
         const c = data[i];
         if (c === "\r") {
           term.write(RETURN);
-          controller.data(buffer);
+          let answer = buffer.join("");
+          answer = answer.replace(/\D/g, "");
+          if (answer.length != 0) {
+            controller.data(answer);
+          }
           buffer = [];
           term.write(controller.prompt());
         } else if (c === "\x7F") {
@@ -81,8 +85,8 @@ class Controller {
     return this.#nextPrompt;
   }
 
-  data(data) {
-    let answer = data.join("");
+  data(answer) {
+    
     if (!this.#started) {
       this.#started = true;
       this.#game.start();

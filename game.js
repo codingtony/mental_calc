@@ -10,8 +10,9 @@ class Game {
     this.numQuestions = numQuestions;
     this.levelHighscore = [];
     const url = new URL(window.location.href);
+    this.maxOperandA = Number(url.searchParams.get('opA')) || 10
+    this.maxOperandB = Number(url.searchParams.get('opB')) || 10
     this.mode = Number(url.searchParams.get('m')) || 1;
-    console.log(this.mode)
     this.initGame();
   }
   #firstTime = true;
@@ -53,12 +54,13 @@ class Game {
     this.finish = false;
     this.mistakes = 0;
     let includeAddSub = (this.mode & 1) === 1;
-    let includeMultDiv = (this.mode & 2) === 2;
+    let includeMult = (this.mode & 2) === 2;
+    let includeDiv = (this.mode &4) === 4;
     console.log(`mode:${this.mode}`)
 
 
     if (includeAddSub) {
-      console.log("Include Additions and Substractions")
+      console.log("Includes Additions and Substractions")
       for (let i = 0; i < 10; i++) {
         for (let j = 1; j < 10; j++) {
           if (i !== 0) {
@@ -78,30 +80,41 @@ class Game {
         }
       }
     }
-    if (includeMultDiv) {
-      console.log("Include Multiplications and Divisions")
-      for (let i = 2; i <= 10; i++) {
-        for (let j = i; j <= 10; j++) {
+    if (includeMult || includeDiv) {
+      console.log(`Includes Multiplications: ${includeMult} and Divisions: ${includeDiv}`)
+      console.log(`Max OperandA: ${this.maxOperandA}, Max OperandB: ${this.maxOperandB}`)
+      for (let i = 2; i <= this.maxOperandA; i++) {
+        for (let j = i; j <= this.maxOperandB; j++) {
           let m = i * j;
           let o = `${m} / ${i}`;
           let a = m / i;
-          this.#question_bank.push([o, a]);
+          if (includeDiv) {
+            this.#question_bank.push([o, a]);
+          }
+
           o = `${i} x ${j}`;
           a = i * j;
-          this.#question_bank.push([o, a]);
-
+          if (includeMult) {
+            this.#question_bank.push([o, a]);
+          }
           if (i != j) {
             let o = `${m} / ${j}`;
             let a = m / j;
-            this.#question_bank.push([o, a]);
+            if (includeDiv) {
+              this.#question_bank.push([o, a]);
+            }
+
             o = `${j} x ${i}`;
             a = j * i;
-            this.#question_bank.push([o, a]);
+            if (includeMult) {
+              this.#question_bank.push([o, a]);
+            }
           }
         }
       }
     }
     console.log("Number of questions in the bank", this.#question_bank.length)
+    console.log("Questions",this.#question_bank)
     let questions = [];
     for (let i = 0; i < this.numQuestions; i++) {
       let randomIndex = Math.floor(Math.random() * this.#question_bank.length);
