@@ -31,9 +31,9 @@ function initTerm(controller) {
           term.write(RETURN);
           let answer = buffer.join("");
           answer = answer.replace(/\D/g, "");
-          if (answer.length != 0) {
-            controller.data(answer);
-          }
+
+          controller.data(answer);
+
           buffer = [];
           term.write(controller.prompt());
         } else if (c === "\x7F") {
@@ -86,27 +86,31 @@ class Controller {
   }
 
   data(answer) {
-    
     if (!this.#started) {
       this.#started = true;
       this.#game.start();
     } else {
-      if (!this.#game.checkAnswer(answer)) {
-        this.#nextPrompt =
-          RED(this.#game.getWrongAnswerMessage()) +
-          RETURN +
-          WHITE(this.#nextQuestion[1][0] + " = ");
-      } else {
-        this.#nextQuestion = this.#game.next();
-        if (this.#nextQuestion === undefined) {
-          this.#game.end();
-          this.#completionCallback();
-        } else {
+      console.log(`ANSWER:[${answer}]`)
+      if (answer.length != 0) {
+        if (!this.#game.checkAnswer(answer)) {
           this.#nextPrompt =
-            WHITE(this.#game.getRightAnswerMessage()) +
+            RED(this.#game.getWrongAnswerMessage()) +
             RETURN +
             WHITE(this.#nextQuestion[1][0] + " = ");
+        } else {
+          this.#nextQuestion = this.#game.next();
+          if (this.#nextQuestion === undefined) {
+            this.#game.end();
+            this.#completionCallback();
+          } else {
+            this.#nextPrompt =
+              WHITE(this.#game.getRightAnswerMessage()) +
+              RETURN +
+              WHITE(this.#nextQuestion[1][0] + " = ");
+          }
         }
+      } else {
+        this.#nextPrompt = WHITE(this.#nextQuestion[1][0] + " = ");
       }
     }
   }
