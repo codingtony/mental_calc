@@ -10,9 +10,13 @@ class Game {
     this.numQuestions = numQuestions;
     this.levelHighscore = [];
     const url = new URL(window.location.href);
-    this.maxOperandA = Number(url.searchParams.get('opA')) || 10
-    this.maxOperandB = Number(url.searchParams.get('opB')) || 10
-    this.mode = Number(url.searchParams.get('m')) || 1;
+    this.maxAdd1 = Number(url.searchParams.get("maxAdd1")) || 10;
+    this.maxAdd2 = Number(url.searchParams.get("maxAdd2")) || 10;
+    this.maxSub1 = Number(url.searchParams.get("maxSub1")) || 20;
+    this.maxSub2 = Number(url.searchParams.get("maxSub2")) || 20;
+    this.maxMulDiv1 = Number(url.searchParams.get("maxMulDiv1")) || 10;
+    this.maxMulDiv2 = Number(url.searchParams.get("maxMulDiv2")) || 10;
+    this.mode = Number(url.searchParams.get("m")) || 3;
     this.initGame();
   }
   #firstTime = true;
@@ -53,38 +57,46 @@ class Game {
     this.score = 0;
     this.finish = false;
     this.mistakes = 0;
-    let includeAddSub = (this.mode & 1) === 1;
-    let includeMult = (this.mode & 2) === 2;
-    let includeDiv = (this.mode &4) === 4;
-    console.log(`mode:${this.mode}`)
+    let includeAdd = (this.mode & 1) === 1;
+    let includeSub = (this.mode & 2) === 2;
+    let includeMult = (this.mode & 4) === 4;
+    let includeDiv = (this.mode & 8) === 8;
+    console.log("Mode", this.mode);
+    console.log("Includes Additions", includeAdd);
+    console.log("Includes Substractions",includeSub);
+    console.log("Includes Multiplications",includeMult);
+    console.log("Includes Divisions", includeDiv);
 
 
-    if (includeAddSub) {
-      console.log("Includes Additions and Substractions")
-      for (let i = 0; i < 10; i++) {
-        for (let j = 1; j < 10; j++) {
-          if (i !== 0) {
-            let o = j + " + " + i;
-            this.#question_bank.push([o, j + i]);
-          }
-          if (i === j) {
-            continue;
-          }
-          if (i > j && i !== 0) {
-            let o = i + " - " + j;
-            this.#question_bank.push([o, i - j]);
-          } else {
-            let o = i + 10 + " - " + j;
-            this.#question_bank.push([o, i + 10 - j]);
+    if (includeAdd) {
+
+      for (let i = 1; i <= this.maxAdd1; i++) {
+        for (let j = i; j <= this.maxAdd2; j++) {
+          let a = i + j;
+          let q = `${i} + ${j}`;
+          this.#question_bank.push([q, a]);
+
+          if (j != i) {
+            q = `${j} + ${i}`;
+            this.#question_bank.push([q, a]);
           }
         }
       }
     }
+    if (includeSub) {
+
+      for (let i = 1; i <= this.maxSub1; i++) {
+        for (let j = i+1; j <= this.maxSub2; j++) {
+            let a1 = j - i;
+            let q1 = `${j} - ${i}`;
+            this.#question_bank.push([q1, a1]);
+        }
+      }
+    }
     if (includeMult || includeDiv) {
-      console.log(`Includes Multiplications: ${includeMult} and Divisions: ${includeDiv}`)
-      console.log(`Max OperandA: ${this.maxOperandA}, Max OperandB: ${this.maxOperandB}`)
-      for (let i = 2; i <= this.maxOperandA; i++) {
-        for (let j = i; j <= this.maxOperandB; j++) {
+ 
+      for (let i = 2; i <= this.maxMulDiv1; i++) {
+        for (let j = i; j <= this.maxMulDiv2; j++) {
           let m = i * j;
           let o = `${m} / ${i}`;
           let a = m / i;
@@ -113,8 +125,8 @@ class Game {
         }
       }
     }
-    console.log("Number of questions in the bank", this.#question_bank.length)
-    console.log("Questions",this.#question_bank)
+    console.log("Number of questions in the bank", this.#question_bank.length);
+    console.log("Questions", this.#question_bank);
     let questions = [];
     for (let i = 0; i < this.numQuestions; i++) {
       let randomIndex = Math.floor(Math.random() * this.#question_bank.length);
@@ -196,7 +208,13 @@ class Game {
       });
     }
     levelHighscore.push(
-      new Score(this.name, this.elapsedMs, this.numQuestions, this.mistakes, this.mode)
+      new Score(
+        this.name,
+        this.elapsedMs,
+        this.numQuestions,
+        this.mistakes,
+        this.mode
+      )
     );
     highscore[this.numQuestions] = levelHighscore;
     localStorage.setItem("highscore", JSON.stringify(highscore));
@@ -205,7 +223,7 @@ class Game {
 }
 
 class Score {
-  constructor(name, elapsedMs, numQuestions, mistakes,mode=1) {
+  constructor(name, elapsedMs, numQuestions, mistakes, mode = 1) {
     this.name = name;
     this.elapsedMs = elapsedMs;
     this.numQuestions = numQuestions;
@@ -214,7 +232,7 @@ class Score {
     this.timestamp = Date.now();
     this.valueOf = this.#valueOf;
     this.elapsed = msToString(this.elapsedMs);
-    this.mode = mode
+    this.mode = mode;
   }
 
   #valueOf() {
