@@ -176,7 +176,7 @@ class Game {
   }
 
   expectedTimeToCompletion() {
-    return this.numQuestions * 5;
+    return this.numQuestions * 6;
   }
 
   getHighscore() {

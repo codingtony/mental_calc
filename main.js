@@ -72,7 +72,7 @@ window.onload = function () {
         .forEach((entry, index) => {
           if (index < top) {
             const listItem = document.createElement("li");
-            listItem.textContent = `${entry.name} - Mistakes: ${
+            listItem.textContent = `${entry.name} - Mistake(s): ${
               entry.mistakes
             } - Time: ${entry.elapsed} - ${entry.when()}`;
             leaderboardList.appendChild(listItem);
@@ -101,7 +101,7 @@ window.onload = function () {
       const resultMessage = document.createElement("p");
       const statsMessage = document.createElement("p");
 
-      statsMessage.textContent = `${game.numQuestions} questions, ${game.mistakes} mistakes, ${game.elapsedTime}`;
+      statsMessage.textContent = `${game.numQuestions} questions, ${game.mistakes} mistake(s), ${game.elapsedTime}`;
 
       if (game.hasWon()) {
         resultMessage.textContent = "Congratulations! You did great!";
