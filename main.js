@@ -1,3 +1,15 @@
+async function getVersion() {
+  try {
+      const response = await fetch('/version.json', { cache: 'no-store' });
+      const data = await response.json();
+      const version = data.version;
+      return version;
+  } catch (error) {
+      console.error('Error fetching version:', error);
+      return null;
+  }
+}
+
 window.onload = function () {
   let nameEl = document.getElementById("name");
   let numQuestionEl = document.getElementById("numQuestions");
@@ -5,6 +17,16 @@ window.onload = function () {
   let questionForm = document.getElementById("questions");
   let finish = document.getElementById("finish");
   let againBtn = document.getElementById("again-btn");
+  let versionInDiv = document.getElementById("version").textContent
+  getVersion().then(version => {
+    if (version) {
+        console.log('Version on server:', version);
+        console.log('Version in index.html:', versionInDiv);
+        if (versionInDiv != "__VERSION__" && versionInDiv != version) {
+          window.location.reload()
+        }
+    }
+  });
 
   function initQuestions() {
     let username = localStorage.getItem("name");
