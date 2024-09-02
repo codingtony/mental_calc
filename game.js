@@ -17,6 +17,7 @@ class Game {
     this.maxMulDiv1 = Number(url.searchParams.get("maxMulDiv1")) || 10;
     this.maxMulDiv2 = Number(url.searchParams.get("maxMulDiv2")) || 10;
     this.mode = Number(url.searchParams.get("m")) || 3;
+    this.timePerQuestion = Number(url.searchParams.get("t")) || 12;
     this.initGame();
   }
   #firstTime = true;
@@ -176,7 +177,7 @@ class Game {
   }
 
   expectedTimeToCompletion() {
-    return this.numQuestions * 6;
+    return this.numQuestions * this.timePerQuestion;
   }
 
   getHighscore() {

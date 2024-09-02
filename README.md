@@ -32,6 +32,11 @@ Controls the maximum operand values
 The default value is 10 for `maxAdd1`, `maxAdd2`,`maxMulDiv1`, `maxMulDiv2`.
 The default value is 20 for `maxSub1`, `maxSub2` (from 2 - 1 to 20 - 19).
 
+### Optional parameter : `t`
+
+Number of second per question to have a success at the end.
+The default value is 12
+
 #### Divisions
 The divisions are built using the `maxMulDiv1` and `maxMulDiv2` parameter indirectly. When building the question bank, the application construct divisions from multiplication. Example : with `2 x 3 = 6` the application construct the following divisions : `6 / 3 = 2` and `6 / 2 = 3`.
 
