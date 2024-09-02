@@ -27,4 +27,4 @@ jobs:
         sed -i "s/__VERSION__/$REV/g" index.html
 
     - name: Sync folder to S3
-      run: aws s3 sync . s3://maths.codingtony.com --exclude '*' --include '*.js' --include '*.html' --include '*.css'
+      run: aws s3 sync . s3://maths.codingtony.com --exclude '*' --include '*.js' --include '*.html' --include '*.json' --include '*.css'
