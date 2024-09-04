@@ -77,3 +77,41 @@ input[type="number"] {
   flex-direction: column;
   align-items: center;
 }
+
+#config {
+  font-family: Arial, sans-serif;
+  max-width: 800px; /* Increase the max-width to allow more space */
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+.config-section {
+  margin-bottom: 20px;
+}
+
+.config-section h2 {
+  font-size: 20px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.config-section ul {
+  list-style: none;
+  padding: 0;
+}
+
+.config-section ul li {
+  font-size: 16px;
+  margin: 5px 0;
+  color: #555;
+  white-space: nowrap; /* Prevent text from wrapping */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Add ellipsis if the text overflows */
+}
+
+.config-section ul li strong {
+  color: #000;
+}

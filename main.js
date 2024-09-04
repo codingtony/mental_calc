@@ -28,6 +28,51 @@ window.onload = function () {
     }
   });
 
+  function renderConfig(div, config) {
+    let operandsHtml = '';
+
+    if (config.add) {
+        operandsHtml += `
+           <li><strong>Addition Range:</strong> Adding numbers from 1 to ${config.maxAddOp1} with numbers from 1 to ${config.maxAddOp2}</li>
+        `;
+    }
+
+    if (config.sub) {
+        operandsHtml += `
+            <li><strong>Subtraction Range:</strong> Subtracting numbers from 1 to ${config.maxSubOp1} from numbers that are 1 more up to ${config.maxSubOp2}</li>
+        `;
+    }
+
+      if (config.mul || config.div) {
+        if (config.mul) {
+           operandsHtml += `
+            <li><strong>Multiplication Range:</strong> Multiplying numbers from 2 to ${config.maxMulDivOp1} with numbers from 2 to ${config.maxMulDivOp2}</li>
+           `;
+        }
+        if (config.div) {
+          operandsHtml += `
+            <li><strong>Division Range:</strong> Dividing products of numbers from 2 to ${config.maxMulDivOp1} by numbers from 2 to ${config.maxMulDivOp2}</li>
+          `;
+       }
+   }
+    const html = `
+        <div class="config-section">
+            <h2>Configuration</h2>
+            <ul>
+                <li><strong>Questions:</strong> ${config.n}</li>
+                <li><strong>Additions:</strong> ${config.add}</li>
+                <li><strong>Subtractions:</strong> ${config.sub}</li>
+                <li><strong>Multiplications:</strong> ${config.mul}</li>
+                <li><strong>Divisions:</strong> ${config.div}</li>
+                <li><strong>Expected Time:</strong> ${config.expectedTimeStr}</li>
+                ${operandsHtml}
+        </div>
+    `;
+
+    div.innerHTML = html
+
+  }
+
   function initQuestions() {
     let username = localStorage.getItem("name");
     let numQuestions = localStorage.getItem("numQuestions");
@@ -58,6 +103,11 @@ window.onload = function () {
     terminalDiv.classList.remove("hidden");
     terminalDiv.focus();
     function completionCallback() {
+      const config = game.getConfig()
+      const  configDiv = document.getElementById("config");
+      renderConfig(configDiv,config)
+  
+      
       terminalDiv.classList.add("hidden");
       finish.classList.remove("hidden");
       finish.classList.add("resultdiv");

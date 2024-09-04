@@ -58,18 +58,18 @@ class Game {
     this.score = 0;
     this.finish = false;
     this.mistakes = 0;
-    let includeAdd = (this.mode & 1) === 1;
-    let includeSub = (this.mode & 2) === 2;
-    let includeMult = (this.mode & 4) === 4;
-    let includeDiv = (this.mode & 8) === 8;
+    this.includeAdd = (this.mode & 1) === 1;
+    this.includeSub = (this.mode & 2) === 2;
+    this.includeMult = (this.mode & 4) === 4;
+    this.includeDiv = (this.mode & 8) === 8;
     console.log("Mode", this.mode);
-    console.log("Includes Additions", includeAdd);
-    console.log("Includes Substractions",includeSub);
-    console.log("Includes Multiplications",includeMult);
-    console.log("Includes Divisions", includeDiv);
+    console.log("Includes Additions", this.includeAdd);
+    console.log("Includes Substractions",this.includeSub);
+    console.log("Includes Multiplications",this.includeMult);
+    console.log("Includes Divisions", this.includeDiv);
 
 
-    if (includeAdd) {
+    if (this.includeAdd) {
 
       for (let i = 1; i <= this.maxAdd1; i++) {
         for (let j = i; j <= this.maxAdd2; j++) {
@@ -84,7 +84,7 @@ class Game {
         }
       }
     }
-    if (includeSub) {
+    if (this.includeSub) {
 
       for (let i = 1; i <= this.maxSub1; i++) {
         for (let j = i+1; j <= this.maxSub2; j++) {
@@ -94,32 +94,32 @@ class Game {
         }
       }
     }
-    if (includeMult || includeDiv) {
+    if (this.includeMult || this.includeDiv) {
  
       for (let i = 2; i <= this.maxMulDiv1; i++) {
         for (let j = i; j <= this.maxMulDiv2; j++) {
           let m = i * j;
           let o = `${m} / ${i}`;
           let a = m / i;
-          if (includeDiv) {
+          if (this.includeDiv) {
             this.#question_bank.push([o, a]);
           }
 
           o = `${i} x ${j}`;
           a = i * j;
-          if (includeMult) {
+          if (this.includeMult) {
             this.#question_bank.push([o, a]);
           }
           if (i != j) {
             let o = `${m} / ${j}`;
             let a = m / j;
-            if (includeDiv) {
+            if (this.includeDiv) {
               this.#question_bank.push([o, a]);
             }
 
             o = `${j} x ${i}`;
             a = j * i;
-            if (includeMult) {
+            if (this.includeMult) {
               this.#question_bank.push([o, a]);
             }
           }
@@ -221,7 +221,27 @@ class Game {
     localStorage.setItem("highscore", JSON.stringify(highscore));
     this.levelHighscore = levelHighscore;
   }
+  
+  getConfig() {
+    return {
+      n: this.numQuestions,
+      add: this.includeAdd,
+      sub: this.includeSub,
+      div: this.includeDiv,
+      mul: this.includeMult,
+      maxAddOp1: this.maxAdd1,
+      maxAddOp2: this.maxAdd2,
+      maxSubOp1: this.maxSub1,
+      maxSubOp2: this.maxSub2,
+      maxMulDivOp1: this.maxMulDiv1,
+      maxMulDivOp2: this.maxMulDiv2,
+      expectedTimeSecs: this.expectedTimeToCompletion(),
+      expectedTimeStr: this.#msToString(this.expectedTimeToCompletion() * 1000) 
+    };
+  } 
 }
+
+
 
 class Score {
   constructor(name, elapsedMs, numQuestions, mistakes, mode = 1) {
