@@ -26,5 +26,21 @@ jobs:
         jq -nc --arg rev "$REV" '{ version: $rev }' > version.json
         sed -i "s/__VERSION__/$REV/g" index.html
 
-    - name: Sync folder to S3
-      run: aws s3 sync . s3://maths.codingtony.com --exclude '*' --include '*.js' --include '*.html' --include '*.json' --include '*.css'
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 'lts/*'
+        cache: 'npm'
+        cache-dependency-path: 2/package-lock.json
+
+    - name: Build game v2
+      working-directory: 2
+      run: |
+        npm ci
+        npm run build
+
+    - name: Sync original game to S3
+      run: aws s3 sync . s3://maths.codingtony.com --exclude '*' --include '*.js' --include '*.html' --include '*.json' --include '*.css' --exclude '2/*'
+
+    - name: Sync game v2 bundle to S3
+      run: aws s3 sync 2/dist s3://maths.codingtony.com/2 --delete
