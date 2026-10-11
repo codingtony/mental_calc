@@ -49,3 +49,6 @@ jobs:
 
     - name: Sync game v2 bundle to S3
       run: aws s3 sync 2/dist s3://maths.codingtony.com/2 --delete --content-encoding gzip
+
+    - name: Invalidate CloudFront cache
+      run: aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths '/*'
