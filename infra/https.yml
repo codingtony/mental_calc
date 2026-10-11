@@ -1,0 +1,103 @@
+# HTTPS for maths.codingtony.com: ACM certificate + CloudFront distribution in
+# front of the S3 website endpoint. Not deployed by CI; run once by hand.
+#
+# Viewer protocol stays allow-all and no HSTS is sent: http must keep serving
+# index.html so migrate.js can hand the http-origin localStorage over to https.
+#
+# Runbook (AWS admin credentials + Gandi access; always pass --region us-east-1,
+# CloudFront only accepts ACM certificates from us-east-1):
+#
+# Complete every step BEFORE pushing migrate.js / the CI invalidation step to
+# main, otherwise http visitors get redirected to an https endpoint that does
+# not exist yet.
+#
+# 1. Find the CI deploy user:
+#      aws iam get-access-key-last-used --access-key-id <AKIA... value of GitHub secret AWS_ACCESS_KEY_ID>
+#    -> UserName (or IAM console -> Users -> Security credentials).
+#
+# 2. Deploy (blocks until the certificate is validated):
+#      aws cloudformation deploy --region us-east-1 --stack-name maths-codingtony-https \
+#        --template-file infra/https.yml --parameter-overrides DeployUserName=<UserName> \
+#        --capabilities CAPABILITY_IAM
+#
+# 3. While it blocks, fetch the ACM validation record:
+#      aws cloudformation describe-stack-events --region us-east-1 --stack-name maths-codingtony-https \
+#        --query "StackEvents[?ResourceType=='AWS::CertificateManager::Certificate'].ResourceStatusReason" --output text
+#    or:
+#      aws acm describe-certificate --region us-east-1 \
+#        --certificate-arn <arn from: aws acm list-certificates --region us-east-1> \
+#        --query "Certificate.DomainValidationOptions[0].ResourceRecord"
+#    Add it at Gandi as a CNAME (name `_xxxx.maths`, value `_yyyy....acm-validations.aws.`).
+#    Keep it forever: ACM uses it for auto-renewal. CloudFront then takes ~5-15 min.
+#
+# 4. Read the outputs:
+#      aws cloudformation describe-stacks --region us-east-1 --stack-name maths-codingtony-https \
+#        --query "Stacks[0].Outputs"
+#
+# 5. Check before the DNS cutover (expect HTTP/2 200 with an x-cache header):
+#      curl -sI --connect-to maths.codingtony.com:443:<DistributionDomainName>:443 https://maths.codingtony.com/
+#
+# 6. Give CI the distribution id:
+#      gh variable set CLOUDFRONT_DISTRIBUTION_ID --body <DistributionId> --repo codingtony/mental_calc
+#
+# 7. Gandi: point the `maths` CNAME at `<DistributionDomainName>.` (was
+#    `codingtony.com.s3-website-us-east-1.amazonaws.com.`). After the TTL:
+#      curl -sI https://maths.codingtony.com/   -> 200
+#
+# Rollback after a failed certificate validation:
+#      aws cloudformation delete-stack --region us-east-1 --stack-name maths-codingtony-https
+AWSTemplateFormatVersion: "2010-09-09"
+Description: HTTPS for maths.codingtony.com (ACM + CloudFront in front of the S3 website endpoint)
+Parameters:
+  DeployUserName:
+    Type: String
+    Description: IAM user whose access key is the GitHub secret AWS_ACCESS_KEY_ID
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: maths.codingtony.com
+      ValidationMethod: DNS
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: maths.codingtony.com
+        Aliases: [maths.codingtony.com]
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Origins:
+          # Website endpoint (not the REST endpoint): it resolves /2/ to /2/index.html.
+          - Id: s3-website
+            DomainName: maths.codingtony.com.s3-website-us-east-1.amazonaws.com
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+        DefaultCacheBehavior:
+          TargetOriginId: s3-website
+          ViewerProtocolPolicy: allow-all
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
+          Compress: true
+          AllowedMethods: [GET, HEAD]
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+  DeployInvalidationPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: cloudfront-invalidate-maths
+      Users: [!Ref DeployUserName]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: cloudfront:CreateInvalidation
+            Resource: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+Outputs:
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionDomainName:
+    Value: !GetAtt Distribution.DomainName
