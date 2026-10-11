@@ -73,6 +73,8 @@ window.onload = function () {
   let opCheckboxes = questionForm.querySelectorAll('input[name="op"]');
   // Every slider's id is a settings field; its value is shown in the #<id>-value output.
   let sliderEls = questionForm.querySelectorAll('input[type="range"]');
+  let rangesFieldset = document.getElementById("ranges");
+  let rangeRows = rangesFieldset.querySelectorAll("[data-ops]");
   let numErrorEl = document.getElementById("numQuestions-error");
   let opsErrorEl = document.getElementById("ops-error");
   let startBtn = document.getElementById("start-btn");
@@ -137,6 +139,14 @@ window.onload = function () {
       sliderEl.value + (sliderEl.dataset.unit ?? "");
   }
 
+  // Show only the sliders used by a checked operation; hide the fieldset when none is checked.
+  function updateRangeVisibility(mode) {
+    rangeRows.forEach((row) => {
+      row.classList.toggle("hidden", (mode & Number(row.dataset.ops)) === 0);
+    });
+    rangesFieldset.classList.toggle("hidden", mode === 0);
+  }
+
   function readSettings() {
     let mode = 0;
     opCheckboxes.forEach((cb) => {
@@ -156,6 +166,7 @@ window.onload = function () {
 
   function validateForm() {
     const settings = readSettings();
+    updateRangeVisibility(settings.mode);
     const numValid = settings.numQuestions !== null;
     const opsValid = settings.mode !== 0;
     numErrorEl.textContent = numValid ? "" : `Enter a whole number between 1 and ${MAX_QUESTIONS}.`;

@@ -131,6 +131,11 @@ input[type="number"] {
   display: block;
 }
 
+/* .maindiv div sets display: flex, which outranks the generic .hidden rule. */
+#ranges .hidden {
+  display: none;
+}
+
 #start-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
