@@ -121,6 +121,18 @@ input[type="number"] {
   min-height: 1.4em;
 }
 
+#settings {
+  margin-bottom: 10px;
+}
+
+#settings summary {
+  cursor: pointer;
+}
+
+#settings[open] summary {
+  margin-bottom: 10px;
+}
+
 #ops,
 #ranges {
   border: 1px solid white;

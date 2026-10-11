@@ -75,6 +75,8 @@ window.onload = function () {
   let sliderEls = questionForm.querySelectorAll('input[type="range"]');
   let rangesFieldset = document.getElementById("ranges");
   let rangeRows = rangesFieldset.querySelectorAll("[data-ops]");
+  let settingsDetails = document.getElementById("settings");
+  let settingsSummaryEl = document.getElementById("settings-summary");
   let numErrorEl = document.getElementById("numQuestions-error");
   let opsErrorEl = document.getElementById("ops-error");
   let startBtn = document.getElementById("start-btn");
@@ -147,6 +149,24 @@ window.onload = function () {
     rangesFieldset.classList.toggle("hidden", mode === 0);
   }
 
+  // "a" when both bounds match, else "a/b".
+  function boundsText(a, b) {
+    return a === b ? String(a) : `${a}/${b}`;
+  }
+
+  // One-line digest of the hidden settings, shown on the collapsed <summary>.
+  function updateSettingsSummary(settings) {
+    const mode = settings.mode;
+    const parts = [];
+    if (mode & 1) parts.push(`+ up to ${boundsText(settings.maxAdd1, settings.maxAdd2)}`);
+    if (mode & 2) parts.push(`− up to ${boundsText(settings.maxSub1, settings.maxSub2)}`);
+    const mulDivSymbols = (mode & 4 ? "×" : "") + (mode & 8 ? "÷" : "");
+    if (mulDivSymbols) parts.push(`${mulDivSymbols} up to ${boundsText(settings.maxMulDiv1, settings.maxMulDiv2)}`);
+    if (parts.length === 0) parts.push("no operation");
+    parts.push(`${settings.timePerQuestion} s/question`);
+    settingsSummaryEl.textContent = parts.join(" · ");
+  }
+
   function readSettings() {
     let mode = 0;
     opCheckboxes.forEach((cb) => {
@@ -167,10 +187,12 @@ window.onload = function () {
   function validateForm() {
     const settings = readSettings();
     updateRangeVisibility(settings.mode);
+    updateSettingsSummary(settings);
     const numValid = settings.numQuestions !== null;
     const opsValid = settings.mode !== 0;
     numErrorEl.textContent = numValid ? "" : `Enter a whole number between 1 and ${MAX_QUESTIONS}.`;
     opsErrorEl.textContent = opsValid ? "" : "Select at least one operation.";
+    if (!opsValid) settingsDetails.open = true;
     const valid = numValid && opsValid;
     startBtn.disabled = !valid;
     return valid;
@@ -198,7 +220,12 @@ window.onload = function () {
 
   numQuestionEl.addEventListener("input", validateForm);
   opCheckboxes.forEach((cb) => cb.addEventListener("change", validateForm));
-  sliderEls.forEach((el) => el.addEventListener("input", () => updateSliderLabel(el)));
+  sliderEls.forEach((el) =>
+    el.addEventListener("input", () => {
+      updateSliderLabel(el);
+      updateSettingsSummary(readSettings());
+    })
+  );
 
   initForm();
 
