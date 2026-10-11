@@ -10,6 +10,59 @@ async function getVersion() {
   }
 }
 
+const DEFAULT_SETTINGS = {
+  numQuestions: 50,
+  mode: 15,
+  timePerQuestion: 3,
+  maxAdd1: 10,
+  maxAdd2: 10,
+  maxSub1: 20,
+  maxSub2: 20,
+  maxMulDiv1: 12,
+  maxMulDiv2: 12,
+};
+const MAX_QUESTIONS = 500;
+
+// Returns the integer if raw is a plain decimal integer string within [min, max], else null.
+function parseIntInRange(raw, min, max) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!/^\d+$/.test(s)) return null;
+  const n = Number(s);
+  return n >= min && n <= max ? n : null;
+}
+
+const SETTING_SPECS = {
+  numQuestions: { urlKey: "n", storageKey: "numQuestions", min: 1, max: MAX_QUESTIONS },
+  mode: { urlKey: "m", storageKey: "mode", min: 1, max: 15 },
+  timePerQuestion: { urlKey: "t", storageKey: "timePerQuestion", min: 1, max: 10 },
+  maxAdd1: { urlKey: "maxAdd1", storageKey: "maxAdd1", min: 1, max: 20 },
+  maxAdd2: { urlKey: "maxAdd2", storageKey: "maxAdd2", min: 1, max: 20 },
+  maxSub1: { urlKey: "maxSub1", storageKey: "maxSub1", min: 1, max: 20 },
+  maxSub2: { urlKey: "maxSub2", storageKey: "maxSub2", min: 2, max: 20 },
+  maxMulDiv1: { urlKey: "maxMulDiv1", storageKey: "maxMulDiv1", min: 2, max: 20 },
+  maxMulDiv2: { urlKey: "maxMulDiv2", storageKey: "maxMulDiv2", min: 2, max: 20 },
+};
+
+// Per field: URL param > localStorage > default. Invalid or out-of-range values are ignored (fall through).
+function loadSettings() {
+  const params = new URL(window.location.href).searchParams;
+  const settings = {};
+  for (const [field, spec] of Object.entries(SETTING_SPECS)) {
+    settings[field] =
+      parseIntInRange(params.get(spec.urlKey), spec.min, spec.max) ??
+      parseIntInRange(localStorage.getItem(spec.storageKey), spec.min, spec.max) ??
+      DEFAULT_SETTINGS[field];
+  }
+  return settings;
+}
+
+function saveSettings(settings) {
+  for (const [field, spec] of Object.entries(SETTING_SPECS)) {
+    localStorage.setItem(spec.storageKey, String(settings[field]));
+  }
+}
+
 window.onload = function () {
   let nameEl = document.getElementById("name");
   let numQuestionEl = document.getElementById("numQuestions");
@@ -17,6 +70,12 @@ window.onload = function () {
   let questionForm = document.getElementById("questions");
   let finish = document.getElementById("finish");
   let againBtn = document.getElementById("again-btn");
+  let opCheckboxes = questionForm.querySelectorAll('input[name="op"]');
+  // Every slider's id is a settings field; its value is shown in the #<id>-value output.
+  let sliderEls = questionForm.querySelectorAll('input[type="range"]');
+  let numErrorEl = document.getElementById("numQuestions-error");
+  let opsErrorEl = document.getElementById("ops-error");
+  let startBtn = document.getElementById("start-btn");
   let versionInDiv = document.getElementById("version").textContent
   getVersion().then(version => {
     if (version) {
@@ -73,32 +132,80 @@ window.onload = function () {
 
   }
 
-  function initQuestions() {
+  function updateSliderLabel(sliderEl) {
+    document.getElementById(sliderEl.id + "-value").textContent =
+      sliderEl.value + (sliderEl.dataset.unit ?? "");
+  }
+
+  function readSettings() {
+    let mode = 0;
+    opCheckboxes.forEach((cb) => {
+      if (cb.checked) {
+        mode += Number(cb.value);
+      }
+    });
+    const settings = {
+      numQuestions: parseIntInRange(numQuestionEl.value, 1, MAX_QUESTIONS),
+      mode: mode,
+    };
+    sliderEls.forEach((el) => {
+      settings[el.id] = Number(el.value);
+    });
+    return settings;
+  }
+
+  function validateForm() {
+    const settings = readSettings();
+    const numValid = settings.numQuestions !== null;
+    const opsValid = settings.mode !== 0;
+    numErrorEl.textContent = numValid ? "" : `Enter a whole number between 1 and ${MAX_QUESTIONS}.`;
+    opsErrorEl.textContent = opsValid ? "" : "Select at least one operation.";
+    const valid = numValid && opsValid;
+    startBtn.disabled = !valid;
+    return valid;
+  }
+
+  function applySettings(settings) {
+    numQuestionEl.value = String(settings.numQuestions);
+    opCheckboxes.forEach((cb) => {
+      cb.checked = (settings.mode & Number(cb.value)) !== 0;
+    });
+    sliderEls.forEach((el) => {
+      el.value = String(settings[el.id]);
+      updateSliderLabel(el);
+    });
+    validateForm();
+  }
+
+  function initForm() {
     let username = localStorage.getItem("name");
-    let numQuestions = localStorage.getItem("numQuestions");
     if (username != null) {
       nameEl.value = username;
     }
-    if (numQuestions != null) {
-      numQuestionEl.value = numQuestions;
-    }
+    applySettings(loadSettings());
   }
 
-  initQuestions();
+  numQuestionEl.addEventListener("input", validateForm);
+  opCheckboxes.forEach((cb) => cb.addEventListener("change", validateForm));
+  sliderEls.forEach((el) => el.addEventListener("input", () => updateSliderLabel(el)));
+
+  initForm();
 
   againBtn.addEventListener("click", function () {
     finish.classList.add("hidden");
     finish.classList.remove("resultdiv");
     questionForm.classList.remove("hidden");
-    initQuestions();
   });
   questionForm.addEventListener("submit", function (evt) {
     evt.preventDefault();
+    if (!validateForm()) {
+      return;
+    }
+    const settings = readSettings();
     let username = nameEl.value;
-    let numQuestions = numQuestionEl.value;
     localStorage.setItem("name", username);
-    localStorage.setItem("numQuestions", numQuestions);
-    const game = new Game(username, numQuestions);
+    saveSettings(settings);
+    const game = new Game(username, settings);
     questionForm.classList.add("hidden");
     terminalDiv.classList.remove("hidden");
     terminalDiv.focus();

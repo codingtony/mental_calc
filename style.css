@@ -115,3 +115,23 @@ input[type="number"] {
 .config-section ul li strong {
   color: #000;
 }
+
+.error {
+  color: red;
+  min-height: 1.4em;
+}
+
+#ops,
+#ranges {
+  border: 1px solid white;
+  margin: 0 0 10px 0;
+}
+
+#ops label {
+  display: block;
+}
+
+#start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

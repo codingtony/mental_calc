@@ -5,19 +5,18 @@ function msToString(millis) {
 }
 
 class Game {
-  constructor(name, numQuestions = 50) {
+  constructor(name, settings) {
     this.name = name;
-    this.numQuestions = numQuestions;
+    this.numQuestions = settings.numQuestions;
     this.levelHighscore = [];
-    const url = new URL(window.location.href);
-    this.maxAdd1 = Number(url.searchParams.get("maxAdd1")) || 10;
-    this.maxAdd2 = Number(url.searchParams.get("maxAdd2")) || 10;
-    this.maxSub1 = Number(url.searchParams.get("maxSub1")) || 20;
-    this.maxSub2 = Number(url.searchParams.get("maxSub2")) || 20;
-    this.maxMulDiv1 = Number(url.searchParams.get("maxMulDiv1")) || 10;
-    this.maxMulDiv2 = Number(url.searchParams.get("maxMulDiv2")) || 10;
-    this.mode = Number(url.searchParams.get("m")) || 3;
-    this.timePerQuestion = Number(url.searchParams.get("t")) || 12;
+    this.maxAdd1 = settings.maxAdd1;
+    this.maxAdd2 = settings.maxAdd2;
+    this.maxSub1 = settings.maxSub1;
+    this.maxSub2 = settings.maxSub2;
+    this.maxMulDiv1 = settings.maxMulDiv1;
+    this.maxMulDiv2 = settings.maxMulDiv2;
+    this.mode = settings.mode;
+    this.timePerQuestion = settings.timePerQuestion;
     this.initGame();
   }
   #firstTime = true;

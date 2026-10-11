@@ -26,29 +26,8 @@ jobs:
         jq -nc --arg rev "$REV" '{ version: $rev }' > version.json
         sed -i "s/__VERSION__/$REV/g" index.html
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 'lts/*'
-        cache: 'npm'
-        cache-dependency-path: 2/package-lock.json
-
-    - name: Build game v2
-      working-directory: 2
-      run: |
-        npm ci
-        npm run build
-
-    # vite-plugin-compression emits only .gz files; strip the suffix so S3
-    # serves them under their real names, tagged as gzip-encoded.
-    - name: Strip .gz suffixes from game v2 bundle
-      run: find 2/dist -name '*.gz' -exec sh -c 'mv "$1" "${1%.gz}"' _ {} \;
-
     - name: Sync original game to S3
-      run: aws s3 sync . s3://maths.codingtony.com --exclude '*' --include '*.js' --include '*.html' --include '*.json' --include '*.css' --exclude '2/*'
-
-    - name: Sync game v2 bundle to S3
-      run: aws s3 sync 2/dist s3://maths.codingtony.com/2 --delete --content-encoding gzip
+      run: aws s3 sync . s3://maths.codingtony.com --exclude '*' --include '*.js' --include '*.html' --include '*.json' --include '*.css'
 
     - name: Invalidate CloudFront cache
       run: aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths '/*'

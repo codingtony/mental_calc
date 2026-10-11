@@ -58,7 +58,7 @@ Resources:
         IPV6Enabled: true
         PriceClass: PriceClass_100
         Origins:
-          # Website endpoint (not the REST endpoint): it resolves /2/ to /2/index.html.
+          # Website endpoint (not the REST endpoint): it resolves directory paths to index.html.
           - Id: s3-website
             DomainName: maths.codingtony.com.s3-website-us-east-1.amazonaws.com
             CustomOriginConfig:

@@ -22,14 +22,64 @@
         <input type="text" id="name" name="name" value="" required />
       </div>
       <div>
-        <label for="numQuestions">Number of Questions:</label>
+        <label for="numQuestions">Number of Questions (1-500):</label>
         <input
-          type="number"
+          type="text"
+          inputmode="numeric"
           id="numQuestions"
           name="numQuestions"
-          value="50"
+          autocomplete="off"
+        />
+        <span id="numQuestions-error" class="error"></span>
+      </div>
+      <fieldset id="ops">
+        <legend>Operations</legend>
+        <label><input type="checkbox" name="op" value="1" /> Addition</label>
+        <label><input type="checkbox" name="op" value="2" /> Subtraction</label>
+        <label><input type="checkbox" name="op" value="4" /> Multiplication</label>
+        <label><input type="checkbox" name="op" value="8" /> Division</label>
+        <span id="ops-error" class="error"></span>
+      </fieldset>
+      <fieldset id="ranges">
+        <legend>Ranges</legend>
+        <div>
+          <label for="maxAdd1">Addition, first number up to: <output id="maxAdd1-value" for="maxAdd1"></output></label>
+          <input type="range" id="maxAdd1" name="maxAdd1" min="1" max="20" step="1" />
+        </div>
+        <div>
+          <label for="maxAdd2">Addition, second number up to: <output id="maxAdd2-value" for="maxAdd2"></output></label>
+          <input type="range" id="maxAdd2" name="maxAdd2" min="1" max="20" step="1" />
+        </div>
+        <div>
+          <label for="maxSub1">Subtraction, number taken away up to: <output id="maxSub1-value" for="maxSub1"></output></label>
+          <input type="range" id="maxSub1" name="maxSub1" min="1" max="20" step="1" />
+        </div>
+        <div>
+          <label for="maxSub2">Subtraction, starting number up to: <output id="maxSub2-value" for="maxSub2"></output></label>
+          <input type="range" id="maxSub2" name="maxSub2" min="2" max="20" step="1" />
+        </div>
+        <div>
+          <label for="maxMulDiv1">Mult/Div, first factor up to: <output id="maxMulDiv1-value" for="maxMulDiv1"></output></label>
+          <input type="range" id="maxMulDiv1" name="maxMulDiv1" min="2" max="20" step="1" />
+        </div>
+        <div>
+          <label for="maxMulDiv2">Mult/Div, second factor up to: <output id="maxMulDiv2-value" for="maxMulDiv2"></output></label>
+          <input type="range" id="maxMulDiv2" name="maxMulDiv2" min="2" max="20" step="1" />
+        </div>
+      </fieldset>
+      <div>
+        <label for="timePerQuestion"
+          >Time per question:
+          <output id="timePerQuestion-value" for="timePerQuestion"></output
+        ></label>
+        <input
+          type="range"
+          id="timePerQuestion"
+          name="timePerQuestion"
           min="1"
-          required
+          max="10"
+          step="1"
+          data-unit=" s"
         />
       </div>
       <div>
