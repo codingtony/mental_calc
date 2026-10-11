@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>Mental Calc GP</title>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+
+    <section id="screen-intro" class="screen hidden">
+      <h1 class="title" id="intro-title">Mental Calc GP</h1>
+      <p class="tagline" data-i18n="tagline"></p>
+      <p class="skip" data-i18n="skip"></p>
+    </section>
+
+    <section id="screen-setup" class="screen hidden">
+      <div class="panel">
+        <div class="flags">
+          <button class="flag" data-lang="sv" aria-label="Svenska">
+            <svg viewBox="0 0 16 10"><rect width="16" height="10" fill="#006AA7"/><rect x="5" width="2" height="10" fill="#FECC00"/><rect y="4" width="16" height="2" fill="#FECC00"/></svg>
+          </button>
+          <button class="flag" data-lang="en" aria-label="English">
+            <svg viewBox="0 0 60 30"><clipPath id="gbt"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath><path d="M0,0 v30 h60 v-30 z" fill="#00247d"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#gbt)" stroke="#cf142b" stroke-width="4"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#cf142b" stroke-width="6"/></svg>
+          </button>
+          <button class="flag" data-lang="fr" aria-label="Français">
+            <svg viewBox="0 0 3 2"><rect width="1" height="2" fill="#0055A4"/><rect x="1" width="1" height="2" fill="#fff"/><rect x="2" width="1" height="2" fill="#EF4135"/></svg>
+          </button>
+        </div>
+        <h1 class="title small">Mental Calc GP</h1>
+
+        <label class="field-label" for="name" data-i18n="nameLabel"></label>
+        <input id="name" maxlength="16" autocomplete="off" data-i18n-placeholder="namePlaceholder" />
+        <p id="name-error" class="error"></p>
+
+        <p class="field-label" data-i18n="categoryLabel"></p>
+        <div class="choices">
+          <button class="choice" data-category="10"><span>10</span><small data-i18n="questionsWord"></small></button>
+          <button class="choice" data-category="30"><span>30</span><small data-i18n="questionsWord"></small></button>
+          <button class="choice" data-category="50"><span>50</span><small data-i18n="questionsWord"></small></button>
+          <button class="choice" data-category="120"><span>120</span><small data-i18n="questionsWord"></small></button>
+        </div>
+
+        <p class="field-label" data-i18n="difficultyLabel"></p>
+        <div class="choices">
+          <button class="choice" data-difficulty="easy"><span data-i18n="easy"></span><small></small></button>
+          <button class="choice" data-difficulty="medium"><span data-i18n="medium"></span><small></small></button>
+          <button class="choice" data-difficulty="hard"><span data-i18n="hard"></span><small></small></button>
+        </div>
+
+        <div class="choices toggles">
+          <button class="choice" id="toggle-music">🎵 <span data-i18n="music"></span>: <b></b></button>
+          <button class="choice" id="toggle-sound">🔊 <span data-i18n="sound"></span>: <b></b></button>
+        </div>
+
+        <button id="next-btn" class="big-btn" data-i18n="next"></button>
+      </div>
+    </section>
+
+    <section id="screen-cups" class="screen hidden">
+      <div class="panel wide">
+        <h2 class="heading" data-i18n="chooseCup"></h2>
+        <p id="cups-config" class="subtle"></p>
+        <div id="cups" class="cups">
+          <button class="cup" data-cup="add"><span class="cup-icon"></span><span class="cup-name"></span><small class="cup-best"></small></button>
+          <button class="cup" data-cup="addsub"><span class="cup-icon"></span><span class="cup-name"></span><small class="cup-best"></small></button>
+          <button class="cup" data-cup="mul"><span class="cup-icon"></span><span class="cup-name"></span><small class="cup-best"></small></button>
+          <button class="cup" data-cup="muldiv"><span class="cup-icon"></span><span class="cup-name"></span><small class="cup-best"></small></button>
+          <button class="cup" data-cup="all"><span class="cup-icon"></span><span class="cup-name"></span><small class="cup-best"></small></button>
+        </div>
+        <button id="cups-back" class="secondary-btn" data-i18n="back"></button>
+      </div>
+    </section>
+
+    <section id="hud" class="hidden">
+      <div id="question">
+        <div id="question-text"></div>
+        <div class="answer-row">
+          <input id="answer" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" />
+          <button id="answer-ok">OK</button>
+        </div>
+        <div id="toast"></div>
+      </div>
+      <div id="position"></div>
+      <div id="race-info">
+        <div id="timer"></div>
+        <div id="goal-time"></div>
+        <div id="lap"></div>
+        <div id="qcount"></div>
+      </div>
+      <ol id="standings"></ol>
+      <div id="lives"><span>❤️</span><span>❤️</span><span>❤️</span></div>
+      <div id="hud-controls">
+        <button id="hud-music" class="icon-btn"></button>
+        <button id="hud-sound" class="icon-btn"></button>
+        <button id="quit-btn" class="icon-btn" data-i18n="quit"></button>
+      </div>
+    </section>
+
+    <div id="countdown" class="hidden">
+      <div class="lights"><span></span><span></span><span></span></div>
+      <div id="countdown-text"></div>
+      <div id="countdown-hint" data-i18n="targetHint"></div>
+    </div>
+
+    <div id="banner" class="hidden"></div>
+
+    <section id="screen-results" class="screen hidden">
+      <div class="panel wide">
+        <h2 id="result-title" class="heading"></h2>
+        <div id="result-position"></div>
+        <dl id="result-stats"></dl>
+        <div class="tabs">
+          <button class="tab" data-board="last" data-i18n="lastGames"></button>
+          <button class="tab" data-board="high" data-i18n="highScores"></button>
+        </div>
+        <div class="board-wrap"><table id="board"></table></div>
+        <div class="choices">
+          <button id="again-btn" class="big-btn" data-i18n="raceAgain"></button>
+          <button id="cups-btn" class="secondary-btn" data-i18n="changeCup"></button>
+          <button id="menu-btn" class="secondary-btn" data-i18n="menu"></button>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
