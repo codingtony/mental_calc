@@ -38,7 +38,7 @@ Number of questions, from 1 to 500. The default value is 50.
 Controls the maximum operand values, up to 20 (minimum 1 for `maxAdd1`, `maxAdd2`, `maxSub1`; minimum 2 for `maxSub2`, `maxMulDiv1`, `maxMulDiv2`).
 The default value is 10 for `maxAdd1`, `maxAdd2`.
 The default value is 20 for `maxSub1`, `maxSub2` (from 2 - 1 to 20 - 19).
-The default value is 12 for `maxMulDiv1`, `maxMulDiv2`.
+The default value is 10 for `maxMulDiv1`, `maxMulDiv2`.
 
 ### Optional parameter : `t`
 
@@ -52,4 +52,4 @@ The divisions are built using the `maxMulDiv1` and `maxMulDiv2` parameter indire
 
 Do only multiplications up to 3 : http://maths.codingtony.com/?m=4&maxMulDiv1=3
 
-It will ask multiplications from 2 x 2 to 3 x 12
+It will ask multiplications from 2 x 2 to 3 x 10

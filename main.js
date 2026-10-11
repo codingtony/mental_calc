@@ -18,8 +18,8 @@ const DEFAULT_SETTINGS = {
   maxAdd2: 10,
   maxSub1: 20,
   maxSub2: 20,
-  maxMulDiv1: 12,
-  maxMulDiv2: 12,
+  maxMulDiv1: 10,
+  maxMulDiv2: 10,
 };
 const MAX_QUESTIONS = 500;
 
