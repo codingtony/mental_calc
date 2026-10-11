@@ -1,17 +1,13 @@
 # HTTPS for maths.codingtony.com: ACM certificate + CloudFront distribution in
 # front of the S3 website endpoint. Not deployed by CI; run once by hand.
 #
-# Viewer protocol stays allow-all and no HSTS is sent: http must keep serving
-# index.html so migrate.js can hand the http-origin localStorage over to https.
-#
 # Runbook (credentials allowed to manage this stack, its certificate and
 # distribution, plus Gandi access; always pass --region us-east-1, CloudFront
 # only accepts ACM certificates from us-east-1). The CI user additionally needs
 # cloudfront:CreateInvalidation on the distribution (granted in IAM, not here).
 #
-# Complete every step BEFORE pushing migrate.js / the CI invalidation step to
-# main, otherwise http visitors get redirected to an https endpoint that does
-# not exist yet.
+# Complete every step BEFORE pushing the CI invalidation step to main,
+# otherwise the deploy job fails for lack of CLOUDFRONT_DISTRIBUTION_ID.
 #
 # 1. Deploy (blocks until the certificate is validated):
 #      aws cloudformation deploy --region us-east-1 --stack-name maths-codingtony-https \
@@ -70,7 +66,7 @@ Resources:
               HTTPPort: 80
         DefaultCacheBehavior:
           TargetOriginId: s3-website
-          ViewerProtocolPolicy: allow-all
+          ViewerProtocolPolicy: redirect-to-https
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
           Compress: true
           AllowedMethods: [GET, HEAD]
