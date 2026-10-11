@@ -6,7 +6,7 @@ The highscores are stored locally in the local storage of the browser.
 
 ## Usage
 
-The start page lets you choose the operations, the number of questions (1 to 500), the operand ranges (sliders, up to 20) and the time per question (1 to 10 seconds).
+The start page lets you choose the operations, the number of questions (1 to 500), the operand ranges (one slider each for addition, subtraction and multiplication/division, up to 20) and the time per question (1 to 10 seconds).
 Each setting is initialized from the URL parameter if present and valid, otherwise from the last game played (local storage), otherwise from the default.
 
 ### Optional parameter : `n`
@@ -39,6 +39,8 @@ Controls the maximum operand values, up to 20 (minimum 1 for `maxAdd1`, `maxAdd2
 The default value is 10 for `maxAdd1`, `maxAdd2`.
 The default value is 20 for `maxSub1`, `maxSub2` (from 2 - 1 to 20 - 19).
 The default value is 10 for `maxMulDiv1`, `maxMulDiv2`.
+
+Each start-page slider sets both bounds of its operation to the same value. If the two bounds differ (e.g. `maxMulDiv1=3&maxMulDiv2=10`), they are kept as passed until the slider is moved. The slider label shows them as `3/10`.
 
 ### Optional parameter : `t`
 

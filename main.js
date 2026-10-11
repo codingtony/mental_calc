@@ -71,9 +71,13 @@ window.onload = function () {
   let finish = document.getElementById("finish");
   let againBtn = document.getElementById("again-btn");
   let opCheckboxes = questionForm.querySelectorAll('input[name="op"]');
-  // Every slider's id is a settings field; its value is shown in the #<id>-value output.
-  let sliderEls = questionForm.querySelectorAll('input[type="range"]');
+  let timeSliderEl = document.getElementById("timePerQuestion");
   let rangesFieldset = document.getElementById("ranges");
+  // Each range slider drives the two settings fields named in its data-fields.
+  let rangeSliderEls = rangesFieldset.querySelectorAll('input[type="range"]');
+  // The six bound fields as last applied from settings or set by a slider. They may be
+  // asymmetric when loaded from URL/localStorage; moving a slider sets both of its fields to its value.
+  let rangeBounds = {};
   let rangeRows = rangesFieldset.querySelectorAll("[data-ops]");
   let settingsDetails = document.getElementById("settings");
   let settingsSummaryEl = document.getElementById("settings-summary");
@@ -136,9 +140,17 @@ window.onload = function () {
 
   }
 
-  function updateSliderLabel(sliderEl) {
+  function updateTimeLabel() {
+    document.getElementById("timePerQuestion-value").textContent =
+      timeSliderEl.value + timeSliderEl.dataset.unit;
+  }
+
+  // Thumb at the larger bound; output shows "a" or "a/b" (boundsText) so asymmetric URL bounds stay visible.
+  function syncRangeSlider(sliderEl) {
+    const [f1, f2] = sliderEl.dataset.fields.split(" ");
+    sliderEl.value = String(Math.max(rangeBounds[f1], rangeBounds[f2]));
     document.getElementById(sliderEl.id + "-value").textContent =
-      sliderEl.value + (sliderEl.dataset.unit ?? "");
+      boundsText(rangeBounds[f1], rangeBounds[f2]);
   }
 
   // Show only the sliders used by a checked operation; hide the fieldset when none is checked.
@@ -178,9 +190,8 @@ window.onload = function () {
       numQuestions: parseIntInRange(numQuestionEl.value, 1, MAX_QUESTIONS),
       mode: mode,
     };
-    sliderEls.forEach((el) => {
-      settings[el.id] = Number(el.value);
-    });
+    settings.timePerQuestion = Number(timeSliderEl.value);
+    Object.assign(settings, rangeBounds);
     return settings;
   }
 
@@ -203,9 +214,11 @@ window.onload = function () {
     opCheckboxes.forEach((cb) => {
       cb.checked = (settings.mode & Number(cb.value)) !== 0;
     });
-    sliderEls.forEach((el) => {
-      el.value = String(settings[el.id]);
-      updateSliderLabel(el);
+    timeSliderEl.value = String(settings.timePerQuestion);
+    updateTimeLabel();
+    rangeSliderEls.forEach((el) => {
+      for (const field of el.dataset.fields.split(" ")) rangeBounds[field] = settings[field];
+      syncRangeSlider(el);
     });
     validateForm();
   }
@@ -220,9 +233,14 @@ window.onload = function () {
 
   numQuestionEl.addEventListener("input", validateForm);
   opCheckboxes.forEach((cb) => cb.addEventListener("change", validateForm));
-  sliderEls.forEach((el) =>
+  timeSliderEl.addEventListener("input", () => {
+    updateTimeLabel();
+    updateSettingsSummary(readSettings());
+  });
+  rangeSliderEls.forEach((el) =>
     el.addEventListener("input", () => {
-      updateSliderLabel(el);
+      for (const field of el.dataset.fields.split(" ")) rangeBounds[field] = Number(el.value);
+      syncRangeSlider(el);
       updateSettingsSummary(readSettings());
     })
   );

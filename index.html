@@ -45,28 +45,16 @@
         <fieldset id="ranges">
           <legend>Ranges</legend>
           <div data-ops="1">
-            <label for="maxAdd1">Addition, first number up to: <output id="maxAdd1-value" for="maxAdd1"></output></label>
-            <input type="range" id="maxAdd1" name="maxAdd1" min="1" max="20" step="1" />
-          </div>
-          <div data-ops="1">
-            <label for="maxAdd2">Addition, second number up to: <output id="maxAdd2-value" for="maxAdd2"></output></label>
-            <input type="range" id="maxAdd2" name="maxAdd2" min="1" max="20" step="1" />
+            <label for="maxAdd">Addition, numbers up to: <output id="maxAdd-value" for="maxAdd"></output></label>
+            <input type="range" id="maxAdd" name="maxAdd" min="1" max="20" step="1" data-fields="maxAdd1 maxAdd2" />
           </div>
           <div data-ops="2">
-            <label for="maxSub1">Subtraction, number taken away up to: <output id="maxSub1-value" for="maxSub1"></output></label>
-            <input type="range" id="maxSub1" name="maxSub1" min="1" max="20" step="1" />
-          </div>
-          <div data-ops="2">
-            <label for="maxSub2">Subtraction, starting number up to: <output id="maxSub2-value" for="maxSub2"></output></label>
-            <input type="range" id="maxSub2" name="maxSub2" min="2" max="20" step="1" />
+            <label for="maxSub">Subtraction, numbers up to: <output id="maxSub-value" for="maxSub"></output></label>
+            <input type="range" id="maxSub" name="maxSub" min="2" max="20" step="1" data-fields="maxSub1 maxSub2" />
           </div>
           <div data-ops="12">
-            <label for="maxMulDiv1">Mult/Div, first factor up to: <output id="maxMulDiv1-value" for="maxMulDiv1"></output></label>
-            <input type="range" id="maxMulDiv1" name="maxMulDiv1" min="2" max="20" step="1" />
-          </div>
-          <div data-ops="12">
-            <label for="maxMulDiv2">Mult/Div, second factor up to: <output id="maxMulDiv2-value" for="maxMulDiv2"></output></label>
-            <input type="range" id="maxMulDiv2" name="maxMulDiv2" min="2" max="20" step="1" />
+            <label for="maxMulDiv">Mult/Div, factors up to: <output id="maxMulDiv-value" for="maxMulDiv"></output></label>
+            <input type="range" id="maxMulDiv" name="maxMulDiv" min="2" max="20" step="1" data-fields="maxMulDiv1 maxMulDiv2" />
           </div>
         </fieldset>
         <div>
