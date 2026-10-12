@@ -28,8 +28,8 @@ export class GameAudio {
   private musicGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private noise: AudioBuffer | null = null;
-  private musicOn = true;
-  private soundOn = true;
+  private musicOn = false;
+  private soundOn = false;
   private seqTimer: number | null = null;
   private seqStep = 0;
   private seqNext = 0;

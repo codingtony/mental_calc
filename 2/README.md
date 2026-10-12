@@ -7,7 +7,7 @@ Vite + TypeScript + Babylon.js; all 3D geometry, music and sound effects are gen
 
 1. Intro animation (about 4.5 s; tap or press a key to skip).
 2. Setup: driver name, number of questions (10 / 30 / 50 / 120), difficulty
-   (Easy 10 s, Medium 5 s, Hard 3 s per question), music and sound on/off, language
+   (Easy 10 s, Medium 5 s, Hard 3 s per question), music and sound on/off (both off by default), language
    (Swedish by default, English, French; pick with the flags).
 3. Choose a cup: Plus (+), Plus-Minus (+ −), Times (×), Times-Divide (× ÷) or Star (all four).
 4. Race against 7 rivals. Each rival keeps a fixed pace relative to the goal time

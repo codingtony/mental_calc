@@ -50,8 +50,8 @@ export function loadPrefs(): Prefs {
     lang: LANGS.includes(p.lang as Lang) ? (p.lang as Lang) : "sv",
     category: CATEGORIES.includes(p.category as Category) ? (p.category as Category) : 30,
     difficulty: typeof p.difficulty === "string" && p.difficulty in DIFFICULTIES ? (p.difficulty as Difficulty) : "medium",
-    music: typeof p.music === "boolean" ? p.music : true,
-    sound: typeof p.sound === "boolean" ? p.sound : true,
+    music: typeof p.music === "boolean" ? p.music : false,
+    sound: typeof p.sound === "boolean" ? p.sound : false,
   };
 }
 
