@@ -1,5 +1,6 @@
 import "./style.css";
 import { Engine } from "@babylonjs/core";
+import QRCode from "qrcode";
 import { GameAudio } from "./audio";
 import {
   CUPS,
@@ -9,25 +10,37 @@ import {
   TARGET_SPEED,
   type Category,
   type Cup,
+  type CupId,
   type Difficulty,
 } from "./config";
-import { fmtTime, ordinal, pick, setLang, t, type Lang } from "./i18n";
+import { fmtTime, mpErrorText, ordinal, pick, setLang, t, type Lang } from "./i18n";
+import type { RankInfo, TopRow } from "./net/protocol";
+import { COUNTDOWN_MS, HostRoom, PlayerRoom, type HostListener, type PlayerListener, type RaceStart } from "./net/room";
+import { displayStatus, TOP_N } from "./net/standings";
 import { defaultQuestionConfig, generateQuestionBank, pickQuestions } from "./questions";
 import { RaceSession } from "./race";
-import { addGame, computeScore, loadPrefs, savePrefs } from "./storage";
+import { mulberry32, randomSeed } from "./rng";
+import { addGame, computeScore, cupById, loadPrefs, savePrefs } from "./storage";
 import {
   el,
   formatQuestion,
   renderAudioToggles,
   renderBoard,
   renderCups,
+  renderHostPlayers,
+  renderHostSettings,
   renderIntroTitle,
+  renderLanes,
+  renderMpStandings,
+  renderNames,
+  renderPodium,
   renderResults,
   renderSetup,
   renderStandings,
   restartAnimation,
   showOnly,
   type BoardKind,
+  type MpStandingRow,
   type StandingEntry,
 } from "./ui";
 import { World } from "./world";
@@ -39,12 +52,16 @@ declare global {
   }
 }
 
-type Screen = "intro" | "setup" | "cups" | "race" | "results";
+type Screen = "intro" | "setup" | "cups" | "race" | "results" | "join" | "wait" | "host";
 
 const INTRO_MS = 4500;
 const COUNTDOWN_STEP_MS = 1000;
 const FINISH_TO_RESULTS_MS = 3000;
 const CRASH_TO_RESULTS_MS = 2500;
+const ROOM_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
+const PROD_JOIN_URL = "https://maths.codingtony.com/2/";
+/** Rival karts in multiplayer: the other players of the top 5. */
+const MP_KART_SLOTS = TOP_N;
 
 const canvas = el<HTMLCanvasElement>("renderCanvas");
 const engine = new Engine(canvas, true, { stencil: false });
@@ -58,6 +75,9 @@ audio.setSound(prefs.sound);
 
 const answerEl = el<HTMLInputElement>("answer");
 const nameEl = el<HTMLInputElement>("name");
+const joinCodeEl = el<HTMLInputElement>("join-code");
+const joinNameEl = el<HTMLInputElement>("join-name");
+const showAllEl = el<HTMLInputElement>("host-showall");
 
 let screen: Screen = "intro";
 let session: RaceSession | null = null;
@@ -74,6 +94,17 @@ let hudPosition = 0;
 let hudText = "";
 let standingsKey = "";
 let lastPlayerDistance = 0;
+
+// Multiplayer: at most one of host/player is set.
+let host: HostRoom | null = null;
+let player: PlayerRoom | null = null;
+let showAll = false;
+let hostQrCode = "";
+let hostTimerText = "";
+/** This kid's own result, frozen when the race ended for them. */
+let mpResult: { elapsedMs: number; errors: number; answered: number; numQuestions: number; goalMs: number; finished: boolean } | null = null;
+/** Kart i+1 shows the player named kartSlots[i].name, eased from `shown` towards `target` (answers). */
+let kartSlots: { name: string | null; target: number; shown: number }[] = [];
 
 function later(ms: number, fn: () => void): void {
   timers.push(window.setTimeout(fn, ms));
@@ -115,6 +146,7 @@ function showSetup(): void {
   nameEl.value = prefs.name;
   el("name-error").textContent = "";
   renderSetup(prefs);
+  el("mp-offline").classList.add("hidden");
 }
 
 document.querySelectorAll<HTMLButtonElement>(".flag").forEach((b) =>
@@ -202,13 +234,48 @@ el("cups-back").addEventListener("click", showSetup);
 
 // ---------- Race ----------
 
-function startRace(selected: Cup): void {
+/** Lights 3-2-1 over `totalMs`, then GO. */
+function runCountdown(totalMs: number, hint: boolean, onGo: () => void): void {
+  const step = totalMs / 3;
+  const lights = el("countdown").querySelectorAll("span");
+  lights.forEach((l) => (l.className = ""));
+  el("countdown-hint").classList.toggle("hidden", !hint);
+  const countdownText = el("countdown-text");
+  countdownText.textContent = "";
+  ["3", "2", "1"].forEach((label, i) =>
+    later(i * step, () => {
+      lights[i].className = "red";
+      countdownText.textContent = label;
+      restartAnimation(countdownText, "pop");
+      audio.beep(false);
+    }),
+  );
+  later(3 * step, () => {
+    lights.forEach((l) => (l.className = "green"));
+    countdownText.textContent = t("go");
+    restartAnimation(countdownText, "pop");
+    el("countdown-hint").classList.add("hidden");
+    audio.beep(true);
+    onGo();
+  });
+  later(3 * step + 800, () => el("countdown").classList.add("hidden"));
+}
+
+/** Solo race against the AI rivals, or (`mp`) a multiplayer race on the room's seed and settings. */
+function startRace(selected: Cup, mp: RaceStart | null = null): void {
   clearTimers();
   cup = selected;
-  raceConfig = { category: prefs.category, difficulty: prefs.difficulty };
+  raceConfig = mp
+    ? { category: mp.settings.n, difficulty: mp.settings.difficulty }
+    : { category: prefs.category, difficulty: prefs.difficulty };
   const timePerQuestion = DIFFICULTIES[raceConfig.difficulty];
   const bank = generateQuestionBank({ ...defaultQuestionConfig, mode: cup.mode });
-  session = new RaceSession(pickQuestions(bank, raceConfig.category), timePerQuestion, RIVALS);
+  const questions = pickQuestions(bank, raceConfig.category, mulberry32(mp ? mp.seed : randomSeed()));
+  session = new RaceSession(questions, timePerQuestion, mp ? [] : RIVALS);
+  // Multiplayer karts appear once the first standings tell who is in the top 5.
+  world.setRivalSlots(mp ? [] : null);
+  kartSlots = [];
+  mpResult = null;
 
   const goalSeconds = session.goalMs / 1000;
   laps = Math.max(1, Math.round((goalSeconds * TARGET_SPEED) / world.track.length));
@@ -229,37 +296,22 @@ function startRace(selected: Cup): void {
   el("question-text").textContent = "";
   el("question").classList.remove("hidden");
   el("toast").className = "";
+  el("position").textContent = "";
+  el("standings").innerHTML = "";
+  el("mp-me").classList.toggle("hidden", !mp);
+  el("hud").classList.toggle("mp", mp !== null);
   answerEl.value = "";
   answerEl.disabled = true;
   el("goal-time").textContent = t("goal", { t: fmtTime(session.goalMs) });
   updateHud(performance.now());
 
-  const lights = el("countdown").querySelectorAll("span");
-  lights.forEach((l) => (l.className = ""));
-  el("countdown-hint").classList.remove("hidden");
-  const countdownText = el("countdown-text");
-  countdownText.textContent = "";
-  ["3", "2", "1"].forEach((label, i) =>
-    later(i * COUNTDOWN_STEP_MS, () => {
-      lights[i].className = "red";
-      countdownText.textContent = label;
-      restartAnimation(countdownText, "pop");
-      audio.beep(false);
-    }),
-  );
-  later(3 * COUNTDOWN_STEP_MS, () => {
-    lights.forEach((l) => (l.className = "green"));
-    countdownText.textContent = t("go");
-    restartAnimation(countdownText, "pop");
-    el("countdown-hint").classList.add("hidden");
-    audio.beep(true);
+  runCountdown(mp ? mp.countdownMs : 3 * COUNTDOWN_STEP_MS, !mp, () => {
     session!.start(performance.now());
     answerEl.disabled = false;
     answerEl.focus();
     showQuestion();
     audio.engine(true, 1);
   });
-  later(3 * COUNTDOWN_STEP_MS + 800, () => el("countdown").classList.add("hidden"));
 }
 
 function showQuestion(): void {
@@ -306,6 +358,10 @@ function submitAnswer(value: string): void {
       endRace(now, "crash", CRASH_TO_RESULTS_MS);
       break;
   }
+  if (player && result !== "wrong") {
+    const s = session!;
+    player.sendProgress(s.answered, s.status === "finished" || s.status === "crashed" ? s.status : "racing", s.elapsedMs(now));
+  }
 }
 
 function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number): void {
@@ -322,23 +378,57 @@ function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number):
 
   const elapsedMs = s.elapsedMs(now);
   const crashed = s.status === "crashed";
-  freshTimestamp = Date.now();
-  addGame({
-    name: prefs.name,
-    category: raceConfig.category,
-    cup: cup.id,
-    difficulty: raceConfig.difficulty,
-    timePerQuestion: s.timePerQuestion,
-    elapsedMs,
-    answered: s.answered,
-    errors: s.errors,
-    position: s.finalPosition(),
-    crashed,
-    won: s.won(),
-    score: crashed ? 0 : computeScore(s.numQuestions, elapsedMs, s.errors),
-    timestamp: freshTimestamp,
-  });
+  if (player) mpResult = mpResultOf(s, elapsedMs);
+  else {
+    freshTimestamp = Date.now();
+    addGame({
+      name: prefs.name,
+      category: raceConfig.category,
+      cup: cup.id,
+      difficulty: raceConfig.difficulty,
+      timePerQuestion: s.timePerQuestion,
+      elapsedMs,
+      answered: s.answered,
+      errors: s.errors,
+      position: s.finalPosition(),
+      crashed,
+      won: s.won(),
+      score: crashed ? 0 : computeScore(s.numQuestions, elapsedMs, s.errors),
+      timestamp: freshTimestamp,
+    });
+  }
   later(resultsDelayMs, () => showResults(s, elapsedMs));
+}
+
+/** Multiplayer games never touch the local high scores: the kid's result lives only here. */
+function mpResultOf(s: RaceSession, elapsedMs: number): NonNullable<typeof mpResult> {
+  return {
+    elapsedMs,
+    errors: s.errors,
+    answered: s.answered,
+    numQuestions: s.numQuestions,
+    goalMs: s.goalMs,
+    finished: s.status === "finished",
+  };
+}
+
+/** The teacher ended the race before this kid finished: freeze the run and show the results. */
+function stopMpRace(): void {
+  const s = session!;
+  audio.engine(false);
+  answerEl.disabled = true;
+  answerEl.blur();
+  mpResult = mpResultOf(s, s.elapsedMs(performance.now()));
+  showResults(s, mpResult.elapsedMs);
+}
+
+/** Drops any running race without results (rematch, kick, leaving the room). */
+function abortRace(): void {
+  clearTimers();
+  audio.engine(false);
+  answerEl.disabled = true;
+  session = null;
+  world.setRivalSlots(null);
 }
 
 function quitRace(): void {
@@ -357,9 +447,10 @@ answerEl.addEventListener("keydown", (e) => {
 // Keep the (mobile) keyboard open: don't let the OK button steal focus.
 el("answer-ok").addEventListener("pointerdown", (e) => e.preventDefault());
 el("answer-ok").addEventListener("click", () => submitAnswer(answerEl.value));
-el("quit-btn").addEventListener("click", quitRace);
+el("quit-btn").addEventListener("click", () => (player ? leavePlayerRoom() : quitRace()));
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && screen === "race") quitRace();
+  // Escape would silently drop a kid out of a multiplayer race: only the Quit button does that.
+  if (e.key === "Escape" && screen === "race" && !player) quitRace();
 });
 
 const RIVAL_COLORS = RIVALS.map((r) => rgbCss(r.color));
@@ -371,10 +462,11 @@ function rgbCss(c: readonly number[]): string {
 
 function updateHud(now: number): void {
   const s = session!;
-  const playerProgress = s.playerProgress(now);
-  const rivals = RIVALS.map((_, i) => s.rivalProgress(i, now));
 
-  if (s.status === "running" || s.status === "countdown") {
+  if (player) updateMpStandings(s);
+  else if (s.status === "running" || s.status === "countdown") {
+    const playerProgress = s.playerProgress(now);
+    const rivals = RIVALS.map((_, i) => s.rivalProgress(i, now));
     const position = s.livePosition(now);
     if (position !== hudPosition) {
       const positionEl = el("position");
@@ -394,40 +486,139 @@ function updateHud(now: number): void {
   }
 
   const lap = Math.min(laps, Math.floor(world.playerDistance() / world.track.length) + 1);
+  const me = player?.standings?.me;
   const text = [
     fmtTime(s.elapsedMs(now)),
     t("lap", { x: Math.max(1, lap), y: laps }),
     t("question", { x: Math.min(s.answered + 1, s.numQuestions), y: s.numQuestions }),
+    player
+      ? t("mpYou", { done: s.answered, n: s.numQuestions, rank: me ? ordinal(me.rank) : "–", of: me ? me.of : "–" })
+      : "",
   ];
   const joined = text.join("\n");
   if (joined !== hudText) {
     el("timer").textContent = text[0];
     el("lap").textContent = text[1];
     el("qcount").textContent = text[2];
+    el("mp-me").textContent = text[3];
     hudText = joined;
+  }
+}
+
+/** Multiplayer HUD: rank of N from the host's standings and the top 5 (plus this kid when outside it). */
+function updateMpStandings(s: RaceSession): void {
+  const standings = player!.standings;
+  if (!standings) return;
+  const { top, me } = standings;
+  if (me.rank !== hudPosition) {
+    const positionEl = el("position");
+    positionEl.innerHTML = `${ordinal(me.rank)}<small>/${me.of}</small>`;
+    if (hudPosition !== 0 && s.status === "running") {
+      restartAnimation(positionEl, me.rank < hudPosition ? "up" : "down");
+      if (me.rank < hudPosition) audio.overtake();
+      else audio.overtaken();
+    }
+    hudPosition = me.rank;
+  }
+  const rows: MpStandingRow[] = top.map((r, i) => {
+    const slot = kartSlots.findIndex((k) => k.name === r.name);
+    return {
+      rank: i + 1,
+      name: r.name,
+      status: r.status,
+      me: i + 1 === me.rank,
+      color: i + 1 === me.rank ? PLAYER_CSS : slot >= 0 ? RIVAL_COLORS[slot] : "#999",
+    };
+  });
+  if (me.rank > top.length) rows.push({ rank: me.rank, name: player!.name, status: me.status, me: true, color: PLAYER_CSS });
+  standingsKey = renderMpStandings(rows, standingsKey);
+}
+
+/**
+ * Gives each other top-5 player a rival kart, keeping the same kart (and colour) for the same
+ * player across updates. A player pushed out of the top 5 keeps its kart at its last known
+ * progress until the slot is needed for someone else.
+ */
+function assignKartSlots(top: TopRow[], me: RankInfo): void {
+  const want = Math.max(0, Math.min(MP_KART_SLOTS, me.of - 1));
+  if (want !== kartSlots.length) {
+    kartSlots = Array.from({ length: want }, (_, i) => kartSlots[i] ?? { name: null, target: 0, shown: 0 });
+    world.setRivalSlots(RIVALS.slice(0, want).map((r) => r.color));
+  }
+  const others = top.filter((_, i) => i + 1 !== me.rank);
+  const names = new Set(others.map((r) => r.name));
+  for (const r of others) {
+    let slot = kartSlots.find((k) => k.name === r.name);
+    if (!slot) {
+      slot = kartSlots.find((k) => k.name === null || !names.has(k.name));
+      if (!slot) continue;
+      slot.name = r.name;
+      slot.shown = r.done;
+    }
+    slot.target = r.done;
   }
 }
 
 // ---------- Results ----------
 
-function showResults(s: RaceSession, elapsedMs: number): void {
+function showResults(s: RaceSession | null, elapsedMs: number): void {
   clearTimers();
   screen = "results";
   showOnly("screen-results");
   world.setMode("menu", performance.now());
-  renderResults({
-    won: s.won(),
-    crashed: s.status === "crashed",
-    position: s.finalPosition(),
-    elapsedMs,
-    goalMs: s.goalMs,
-    errors: s.errors,
-    answered: s.answered,
-    numQuestions: s.numQuestions,
-  });
-  board = "last";
-  renderBoard(board, { ...raceConfig, cup: cup.id }, freshTimestamp);
+  world.setRivalSlots(null);
+  const mp = player !== null;
+  // Multiplayer games never touch the local high scores: no board, no solo buttons.
+  document.querySelector(".tabs")!.classList.toggle("hidden", mp);
+  el("board").parentElement!.classList.toggle("hidden", mp);
+  for (const id of ["again-btn", "cups-btn", "menu-btn"]) el(id).classList.toggle("hidden", mp);
+  el("mp-leave-btn").classList.toggle("hidden", !mp);
+  el("mp-podium").classList.toggle("hidden", !mp);
+  el("result-stats").classList.remove("hidden");
+  if (s && !mp) {
+    renderResults({
+      title: t(s.won() ? "resultWon" : s.status === "crashed" ? "resultCrashed" : "resultLost"),
+      position: s.finalPosition(),
+      of: 8,
+      elapsedMs,
+      goalMs: s.goalMs,
+      errors: s.errors,
+      answered: s.answered,
+      numQuestions: s.numQuestions,
+      score: null,
+    });
+    board = "last";
+    renderBoard(board, { ...raceConfig, cup: cup.id }, freshTimestamp);
+  } else renderMpResults();
   session = null;
+}
+
+/**
+ * Kid's results: podium from the final standings, or from the latest standings while the race
+ * is still on ("Race in progress…", re-rendered on each update). `mpResult` is null for a kid
+ * who reloaded mid-race and only spectates.
+ */
+function renderMpResults(): void {
+  const p = player!;
+  const data = p.final ?? p.standings;
+  const title = t(p.final ? "mpFinalResults" : "mpRaceInProgress");
+  renderPodium(el("mp-podium"), data?.top ?? [], p.start?.settings.n ?? p.settings?.n ?? raceConfig.category, data?.me.rank ?? null);
+  if (mpResult) {
+    const r = mpResult;
+    renderResults({
+      title,
+      position: data ? data.me.rank : null,
+      of: data ? data.me.of : 0,
+      elapsedMs: r.elapsedMs,
+      goalMs: r.goalMs,
+      errors: r.errors,
+      answered: r.answered,
+      numQuestions: r.numQuestions,
+      score: r.finished ? computeScore(r.numQuestions, r.elapsedMs, r.errors) : 0,
+    });
+  } else el("result-title").textContent = title;
+  el("result-position").classList.toggle("hidden", !mpResult);
+  el("result-stats").classList.toggle("hidden", !mpResult);
 }
 
 document.querySelectorAll<HTMLButtonElement>(".tab").forEach((b) =>
@@ -439,8 +630,267 @@ document.querySelectorAll<HTMLButtonElement>(".tab").forEach((b) =>
 el("again-btn").addEventListener("click", () => startRace(cup));
 el("cups-btn").addEventListener("click", showCups);
 el("menu-btn").addEventListener("click", showSetup);
+el("mp-leave-btn").addEventListener("click", leavePlayerRoom);
+
+// ---------- Multiplayer: join (kid) ----------
+
+const offline = (online: boolean) => el("mp-offline").classList.toggle("hidden", online);
+
+const playerListener: PlayerListener = {
+  onMessage(msg) {
+    const p = player;
+    if (!p) return;
+    switch (msg.t) {
+      case "joined":
+        if (screen !== "wait") break;
+        // A reload mid-race rejoins as a spectator.
+        if (p.phase === "lobby") renderWait();
+        else showResults(null, 0);
+        break;
+      case "lobby":
+        if (screen === "wait") renderWait();
+        break;
+      case "started":
+        startRace(cupById(msg.settings.cup), p.start);
+        break;
+      case "standings":
+        if (screen === "race") assignKartSlots(p.standings!.top, p.standings!.me);
+        else if (screen === "results") renderMpResults();
+        else if (screen === "wait") showResults(null, 0);
+        break;
+      case "ended":
+        if (screen === "race" && session && (session.status === "running" || session.status === "countdown")) stopMpRace();
+        else if (screen === "results") renderMpResults();
+        else if (screen === "wait") showResults(null, 0);
+        break;
+      case "rematch":
+        abortRace();
+        showWait();
+        break;
+      case "kicked":
+        player = null;
+        abortRace();
+        showJoin(p.code, t("mpKicked"));
+        break;
+    }
+  },
+  onError(reason, fatal) {
+    if (!fatal) {
+      console.warn("relay error", reason);
+      return;
+    }
+    const code = player?.code ?? "";
+    player = null;
+    abortRace();
+    showJoin(code, mpErrorText(reason));
+  },
+  onConnection: offline,
+};
+
+function showJoin(code: string, error = ""): void {
+  clearTimers();
+  screen = "join";
+  showOnly("screen-join");
+  world.setMode("menu", performance.now());
+  el("mp-offline").classList.add("hidden");
+  joinCodeEl.value = code;
+  joinNameEl.value = prefs.name;
+  el("join-error").textContent = error;
+  (code ? joinNameEl : joinCodeEl).focus();
+}
+
+function submitJoin(): void {
+  const code = joinCodeEl.value.trim().toUpperCase();
+  const name = joinNameEl.value.trim();
+  if (!ROOM_CODE.test(code)) {
+    el("join-error").textContent = t("mpCodeInvalid");
+    joinCodeEl.focus();
+    return;
+  }
+  if (name === "") {
+    el("join-error").textContent = t("nameRequired");
+    joinNameEl.focus();
+    return;
+  }
+  prefs.name = name;
+  savePrefs(prefs);
+  player = new PlayerRoom(code, name, playerListener);
+  showWait();
+}
+
+function showWait(): void {
+  clearTimers();
+  screen = "wait";
+  showOnly("screen-wait");
+  world.setMode("menu", performance.now());
+  renderWait();
+}
+
+function renderWait(): void {
+  const p = player!;
+  el("wait-code").textContent = p.code;
+  el("wait-caption").textContent = t(p.phase === "joining" ? "mpConnecting" : "mpWaitingStart");
+  renderNames(el("wait-names"), p.names, p.name);
+}
+
+function leavePlayerRoom(): void {
+  player?.leave();
+  player = null;
+  abortRace();
+  showSetup();
+}
+
+el("join-btn").addEventListener("click", () => showJoin(""));
+el("join-go").addEventListener("click", submitJoin);
+el("join-back").addEventListener("click", showSetup);
+el("wait-leave").addEventListener("click", leavePlayerRoom);
+joinCodeEl.addEventListener("input", () => {
+  joinCodeEl.value = joinCodeEl.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+});
+for (const input of [joinCodeEl, joinNameEl]) {
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") submitJoin();
+  });
+}
+
+// ---------- Multiplayer: host (teacher) ----------
+
+const hostListener: HostListener = {
+  onChange() {
+    if (screen === "host") renderHost();
+  },
+  onError(reason, fatal) {
+    if (!fatal) {
+      console.warn("relay error", reason);
+      return;
+    }
+    closeHostRoom();
+    el("name-error").textContent = mpErrorText(reason);
+  },
+  onConnection: offline,
+};
+
+function openHostRoom(): void {
+  host = new HostRoom({ cup: cup.id, n: prefs.category, difficulty: prefs.difficulty }, hostListener);
+  showHost();
+}
+
+function showHost(): void {
+  clearTimers();
+  screen = "host";
+  showAll = false;
+  showAllEl.checked = false;
+  hostTimerText = "";
+  showOnly("screen-host");
+  world.setMode("menu", performance.now());
+  renderHost();
+}
+
+function closeHostRoom(): void {
+  host?.close();
+  host = null;
+  hostQrCode = "";
+  showSetup();
+}
+
+function renderHost(): void {
+  const h = host!;
+  const lobby = h.phase === "lobby";
+  el("host-lobby").classList.toggle("hidden", !lobby);
+  el("host-board").classList.toggle("hidden", lobby);
+  if (lobby) {
+    el("host-code").textContent = h.code || "…";
+    if (h.code && h.code !== hostQrCode) {
+      const code = h.code;
+      hostQrCode = code;
+      const relay = new URLSearchParams(location.search).get("relay");
+      // Dev: join this dev server (and its relay) from another device on the LAN.
+      const url = import.meta.env.DEV
+        ? `${location.origin}${location.pathname}?room=${code}${relay ? `&relay=${encodeURIComponent(relay)}` : ""}`
+        : `${PROD_JOIN_URL}?room=${code}`;
+      el("host-url").textContent = url;
+      QRCode.toDataURL(url, { margin: 1, width: 440 }).then((src) => {
+        if (hostQrCode === code) el<HTMLImageElement>("host-qr").src = src;
+      });
+    }
+    renderHostSettings(h.settings);
+    renderHostPlayers([...h.players.values()].sort((a, b) => a.order - b.order));
+    el<HTMLButtonElement>("host-start").disabled = !h.joinable;
+    return;
+  }
+  const { ranked, top } = h.standings;
+  const ended = h.phase === "ended";
+  el("host-room").textContent = h.code;
+  el("host-counter").textContent = t("mpCounter", {
+    f: ranked.filter((p) => p.status === "finished").length,
+    c: ranked.filter((p) => p.status === "crashed").length,
+    n: ranked.length,
+  });
+  el("host-podium").classList.toggle("hidden", !ended);
+  if (ended) renderPodium(el("host-podium"), top, h.settings.n, null);
+  renderLanes(
+    el("lanes"),
+    (showAll ? ranked : ranked.slice(0, TOP_N)).map((p, i) => ({
+      id: p.id,
+      rank: i + 1,
+      name: p.name,
+      done: p.done,
+      status: displayStatus(p),
+      ms: p.ms,
+      color: `hsl(${(p.order * 137) % 360} 75% 50%)`,
+    })),
+    h.settings.n,
+  );
+  el("host-end").classList.toggle("hidden", ended);
+  el("host-rematch").classList.toggle("hidden", !ended);
+  el("host-close2").classList.toggle("hidden", !ended);
+}
+
+function updateHostTimer(): void {
+  const h = host!;
+  const text = h.phase === "lobby" ? "" : fmtTime(Math.max(0, (h.endAt || Date.now()) - h.goAt));
+  if (text !== hostTimerText) el("host-timer").textContent = hostTimerText = text;
+}
+
+el("host-btn").addEventListener("click", openHostRoom);
+el("host-close").addEventListener("click", closeHostRoom);
+el("host-close2").addEventListener("click", closeHostRoom);
+el("host-start").addEventListener("click", () => {
+  if (!host?.joinable) return;
+  host.start();
+  showOnly("screen-host", "countdown");
+  runCountdown(COUNTDOWN_MS, false, () => {});
+});
+el("host-end").addEventListener("click", () => host?.end());
+el("host-rematch").addEventListener("click", () => host?.rematch());
+showAllEl.addEventListener("change", () => {
+  showAll = showAllEl.checked;
+  renderHost();
+});
+el("host-players").addEventListener("click", (e) => {
+  const id = (e.target as HTMLElement).closest<HTMLElement>("[data-kick]")?.dataset.kick;
+  if (id) host?.kick(id);
+});
+document.querySelectorAll<HTMLButtonElement>("[data-host-cup]").forEach((b) =>
+  b.addEventListener("click", () => host?.setSettings({ ...host.settings, cup: b.dataset.hostCup as CupId })),
+);
+document.querySelectorAll<HTMLButtonElement>("[data-host-n]").forEach((b) =>
+  b.addEventListener("click", () => host?.setSettings({ ...host.settings, n: Number(b.dataset.hostN) as Category })),
+);
+document.querySelectorAll<HTMLButtonElement>("[data-host-difficulty]").forEach((b) =>
+  b.addEventListener("click", () =>
+    host?.setSettings({ ...host.settings, difficulty: b.dataset.hostDifficulty as Difficulty }),
+  ),
+);
 
 // ---------- Render loop ----------
+
+/** Eases each multiplayer rival kart towards its player's last reported answer count. */
+function mpRivalProgress(dt: number): number[] {
+  const k = 1 - Math.exp(-dt * 3);
+  for (const slot of kartSlots) slot.shown += (slot.target - slot.shown) * k;
+  return kartSlots.map((slot) => slot.shown);
+}
 
 engine.runRenderLoop(() => {
   const now = performance.now();
@@ -452,7 +902,7 @@ engine.runRenderLoop(() => {
     racing
       ? {
           player: session!.playerProgress(now),
-          rivals: RIVALS.map((_, i) => session!.rivalProgress(i, now)),
+          rivals: player ? mpRivalProgress(dt) : RIVALS.map((_, i) => session!.rivalProgress(i, now)),
           perQuestion,
         }
       : null,
@@ -466,6 +916,7 @@ engine.runRenderLoop(() => {
       lastPlayerDistance = distance;
     }
   }
+  if (screen === "host" && host) updateHostTimer();
   world.render();
 });
 window.addEventListener("resize", () => engine.resize());
@@ -476,8 +927,21 @@ if (import.meta.env.DEV) {
     session: () => session,
     solve: () => submitAnswer(String(session!.currentQuestion()!.answer)),
     fail: () => submitAnswer("99999"),
+    host: () => host,
+    player: () => player,
   };
 }
 
 setLang(prefs.lang);
-showIntro();
+// The QR-code and reload paths skip the setup screen, which normally fills the HUD audio buttons.
+renderAudioToggles(prefs);
+// A reload resumes this tab's room (host or player); `?room=CODE` (QR code) opens the join screen.
+const roomParam = new URLSearchParams(location.search).get("room")?.trim().toUpperCase() || null;
+host = HostRoom.resume(hostListener);
+if (host) showHost();
+else {
+  player = PlayerRoom.resume(playerListener, roomParam);
+  if (player) showWait();
+  else if (roomParam) showJoin(roomParam);
+  else showIntro();
+}

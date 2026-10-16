@@ -82,6 +82,47 @@ const STRINGS: Record<string, Entry> = {
   changeCup: { sv: "Byt cup", en: "Change cup", fr: "Changer de coupe" },
   menu: { sv: "Meny", en: "Menu", fr: "Menu" },
   quit: { sv: "Avsluta", en: "Quit", fr: "Quitter" },
+  // ---------- Multiplayer ----------
+  mpHost: { sv: "Arrangera ett lopp", en: "Host a race", fr: "Organiser une course" },
+  mpJoin: { sv: "Gå med i ett lopp", en: "Join a race", fr: "Rejoindre une course" },
+  mpCodeLabel: { sv: "Loppkod", en: "Race code", fr: "Code de la course" },
+  mpJoinGo: { sv: "Gå med", en: "Join", fr: "Rejoindre" },
+  mpCodeInvalid: { sv: "Skriv koden med 5 tecken", en: "Enter the 5-character code", fr: "Entre le code à 5 caractères" },
+  mpConnecting: { sv: "Ansluter…", en: "Connecting…", fr: "Connexion…" },
+  mpReconnecting: { sv: "Återansluter…", en: "Reconnecting…", fr: "Reconnexion…" },
+  mpWaitingStart: { sv: "Väntar på att loppet ska starta…", en: "Waiting for the race to start…", fr: "En attente du départ de la course…" },
+  mpWaitingPlayers: { sv: "Väntar på spelare…", en: "Waiting for players…", fr: "En attente de joueurs…" },
+  mpPlayers: { sv: "{n} spelare", en: "{n} players", fr: "{n} joueurs" },
+  mpScanToJoin: { sv: "Skanna koden eller gå till", en: "Scan the code or go to", fr: "Scanne le code ou va sur" },
+  mpRace: { sv: "Lopp", en: "Race", fr: "Course" },
+  mpKick: { sv: "Ta bort", en: "Remove", fr: "Retirer" },
+  mpStart: { sv: "Starta loppet", en: "Start the race", fr: "Lancer la course" },
+  mpEnd: { sv: "Avsluta loppet", en: "End the race", fr: "Terminer la course" },
+  mpRematch: { sv: "Kör igen", en: "Rematch", fr: "Revanche" },
+  mpCloseRoom: { sv: "Stäng rummet", en: "Close the room", fr: "Fermer la salle" },
+  mpLeave: { sv: "Lämna loppet", en: "Leave the race", fr: "Quitter la course" },
+  mpShowAll: { sv: "Visa alla spelare", en: "Show all players", fr: "Afficher tous les joueurs" },
+  mpCounter: {
+    sv: "🏁 {f} i mål · 💥 {c} kraschade · {n} spelare",
+    en: "🏁 {f} finished · 💥 {c} crashed · {n} players",
+    fr: "🏁 {f} arrivés · 💥 {c} crashés · {n} joueurs",
+  },
+  mpYou: { sv: "Du: {done}/{n} · {rank} av {of}", en: "You: {done}/{n} · {rank} of {of}", fr: "Toi : {done}/{n} · {rank} sur {of}" },
+  mpRaceInProgress: { sv: "Loppet pågår…", en: "Race in progress…", fr: "Course en cours…" },
+  mpFinalResults: { sv: "Slutresultat", en: "Final results", fr: "Résultats finaux" },
+  statScore: { sv: "Poäng", en: "Score", fr: "Score" },
+  mpKicked: { sv: "Du togs bort från loppet", en: "You were removed from the race", fr: "Tu as été retiré de la course" },
+  "mpErr.not_found": { sv: "Hittade inget lopp med den koden", en: "No race found with that code", fr: "Aucune course avec ce code" },
+  "mpErr.full": { sv: "Loppet är fullt", en: "The race is full", fr: "La course est complète" },
+  "mpErr.started": { sv: "Loppet har redan startat", en: "The race has already started", fr: "La course a déjà commencé" },
+  "mpErr.bad_name": { sv: "Ogiltigt namn", en: "Invalid name", fr: "Nom invalide" },
+  "mpErr.closed": { sv: "Loppet är stängt", en: "The race was closed", fr: "La course est fermée" },
+  "mpErr.replaced": {
+    sv: "Loppet öppnades i en annan flik",
+    en: "The race was opened in another tab",
+    fr: "La course a été ouverte dans un autre onglet",
+  },
+  mpErrGeneric: { sv: "Kunde inte ansluta ({reason})", en: "Could not connect ({reason})", fr: "Connexion impossible ({reason})" },
 };
 
 let lang: Lang = "sv";
@@ -101,6 +142,11 @@ export function t(key: string, params: Record<string, string | number> = {}): st
 export function pick(key: string): string {
   const value = STRINGS[key][lang];
   return Array.isArray(value) ? value[Math.floor(Math.random() * value.length)] : value;
+}
+
+/** Translated relay `error.reason` (or client-side close reason), with a generic fallback. */
+export function mpErrorText(reason: string): string {
+  return STRINGS[`mpErr.${reason}`] ? t(`mpErr.${reason}`) : t("mpErrGeneric", { reason });
 }
 
 /** Sets the active language and re-translates every [data-i18n] / [data-i18n-placeholder] element. */

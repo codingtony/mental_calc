@@ -1,0 +1,32 @@
+name: Relay release
+
+on:
+  push:
+    tags: ["relay-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: relay/go.mod
+        cache-dependency-path: relay/go.sum
+
+    - name: Test and build
+      run: |
+        cd relay && go test ./... && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o mc-relay-linux-amd64 .
+        sha256sum mc-relay-linux-amd64 | cut -d' ' -f1 > mc-relay-linux-amd64.sha256
+
+    - name: Create GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release create "$GITHUB_REF_NAME" relay/mc-relay-linux-amd64 relay/mc-relay-linux-amd64.sha256

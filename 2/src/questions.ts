@@ -99,12 +99,13 @@ export function generateQuestionBank(config: QuestionConfig): Question[] {
 
 /**
  * Picks numQuestions random questions from the bank, with replacement.
- * Ported 1:1 from game.js Game.initGame's random-pick loop.
+ * Ported from game.js Game.initGame's random-pick loop; `rng` (e.g. mulberry32(seed)) replaces
+ * Math.random so every player of a multiplayer race gets the same sequence.
  */
-export function pickQuestions(bank: Question[], numQuestions: number): Question[] {
+export function pickQuestions(bank: Question[], numQuestions: number, rng: () => number): Question[] {
   const questions: Question[] = [];
   for (let i = 0; i < numQuestions; i++) {
-    const randomIndex = Math.floor(Math.random() * bank.length);
+    const randomIndex = Math.floor(rng() * bank.length);
     questions.push(bank[randomIndex]);
   }
   return questions;

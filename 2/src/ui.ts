@@ -1,12 +1,24 @@
 import { CUPS, DIFFICULTIES, type Category, type CupId, type Difficulty } from "./config";
 import { fmtDate, fmtTime, getLang, ordinal, t } from "./i18n";
+import type { PlayerStatus, RoomSettings, TopRow } from "./net/protocol";
 import { bestFor, cupById, highScores, lastGames, type GameRecord, type Prefs } from "./storage";
 
 export function el<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
 
-const OVERLAYS = ["screen-intro", "screen-setup", "screen-cups", "hud", "countdown", "banner", "screen-results"];
+const OVERLAYS = [
+  "screen-intro",
+  "screen-setup",
+  "screen-cups",
+  "screen-join",
+  "screen-wait",
+  "screen-host",
+  "hud",
+  "countdown",
+  "banner",
+  "screen-results",
+];
 
 /** Shows exactly the given overlays; hides every other one. */
 export function showOnly(...ids: string[]): void {
@@ -116,31 +128,152 @@ export function escapeHtml(text: string): string {
 }
 
 export interface RaceSummary {
-  won: boolean;
-  crashed: boolean;
+  title: string;
+  /** null = DNF */
   position: number | null;
+  /** Number of racers: 8 in solo, the room size in multiplayer. */
+  of: number;
   elapsedMs: number;
   goalMs: number;
   errors: number;
   answered: number;
   numQuestions: number;
+  /** Shown only when given (multiplayer). */
+  score: number | null;
 }
 
 export function renderResults(s: RaceSummary): void {
-  el("result-title").textContent = t(s.won ? "resultWon" : s.crashed ? "resultCrashed" : "resultLost");
+  el("result-title").textContent = s.title;
   const pos = el("result-position");
   pos.className = s.position === null ? "dnf" : (["", "gold", "silver", "bronze"][s.position] ?? "");
   pos.textContent = s.position === null ? t("dnf") : ordinal(s.position);
   const stats: [string, string][] = [
-    ["statPosition", s.position === null ? t("dnf") : `${ordinal(s.position)} / 8`],
+    ["statPosition", s.position === null ? t("dnf") : `${ordinal(s.position)} / ${s.of}`],
     ["statTime", fmtTime(s.elapsedMs)],
     ["statGoal", fmtTime(s.goalMs)],
     ["statErrors", String(s.errors)],
     ["statAnswered", `${s.answered}/${s.numQuestions}`],
   ];
+  if (s.score !== null) stats.push(["statScore", String(s.score)]);
   el("result-stats").innerHTML = stats
     .map(([key, value]) => `<div><dt>${t(key)}</dt><dd>${value}</dd></div>`)
     .join("");
+}
+
+// ---------- Multiplayer ----------
+
+const STATUS_ICON: Record<PlayerStatus, string> = { racing: "", finished: "🏁", crashed: "💥", disconnected: "📵" };
+
+/** Finish time for finishers, otherwise answered/N with a status icon. */
+function rowInfo(r: { done: number; status: PlayerStatus; ms: number }, n: number): string {
+  return r.status === "finished" ? `🏁 ${fmtTime(r.ms)}` : `${STATUS_ICON[r.status]} ${r.done}/${n}`.trim();
+}
+
+/** Kahoot-style podium for ranks 1–3 (tallest in the middle) and a list for 4–5. */
+export function renderPodium(container: HTMLElement, top: TopRow[], n: number, myRank: number | null): void {
+  const step = (rank: number) => {
+    const r = top[rank - 1];
+    const cls = `step p${rank}${rank === myRank ? " me" : ""}`;
+    return r
+      ? `<div class="${cls}"><span class="pname">${escapeHtml(r.name)}</span><span class="pinfo">${rowInfo(r, n)}</span><div class="block">${rank}</div></div>`
+      : `<div class="${cls} empty"><div class="block">${rank}</div></div>`;
+  };
+  const rest = top
+    .slice(3)
+    .map(
+      (r, i) =>
+        `<li class="${i + 4 === myRank ? "me" : ""}"><span class="rank">${ordinal(i + 4)}</span>` +
+        `<span class="pname">${escapeHtml(r.name)}</span><span class="pinfo">${rowInfo(r, n)}</span></li>`,
+    )
+    .join("");
+  container.innerHTML = `<div class="podium">${step(2)}${step(1)}${step(3)}</div><ol class="podium-rest">${rest}</ol>`;
+}
+
+export interface MpStandingRow {
+  rank: number;
+  name: string;
+  color: string;
+  status: PlayerStatus;
+  me: boolean;
+}
+
+/** HUD list for multiplayer, already in rank order. Returns a key so callers can skip identical re-renders. */
+export function renderMpStandings(rows: MpStandingRow[], previousKey: string): string {
+  const key = getLang() + rows.map((r) => `${r.rank}${r.name}${r.color}${r.status}`).join("|");
+  if (key === previousKey) return key;
+  el("standings").innerHTML = rows
+    .map(
+      (r) =>
+        `<li class="${r.me ? "me" : ""}"><span class="rank">${ordinal(r.rank)}</span>` +
+        `<span class="dot" style="background:${r.color}"></span>${escapeHtml(r.name)} ${STATUS_ICON[r.status]}</li>`,
+    )
+    .join("");
+  return key;
+}
+
+export interface LaneRow {
+  id: string;
+  rank: number;
+  name: string;
+  done: number;
+  status: PlayerStatus;
+  ms: number;
+  color: string;
+}
+
+/** Teacher's 2D lane board. Keyed by player id so karts glide (CSS transition) instead of re-rendering. */
+export function renderLanes(list: HTMLElement, rows: LaneRow[], n: number): void {
+  const existing = new Map<string, HTMLElement>();
+  for (const li of Array.from(list.children) as HTMLElement[]) existing.set(li.dataset.id!, li);
+  rows.forEach((r, i) => {
+    let li = existing.get(r.id);
+    if (li) existing.delete(r.id);
+    else {
+      li = document.createElement("li");
+      li.dataset.id = r.id;
+      li.innerHTML = `<span class="rank"></span><span class="lname"></span><div class="track"><span class="kart"></span></div><span class="ldone"></span>`;
+    }
+    li.className = `lane ${r.status}`;
+    li.querySelector(".rank")!.textContent = String(r.rank);
+    li.querySelector(".lname")!.textContent = r.name;
+    const kart = li.querySelector<HTMLElement>(".kart")!;
+    kart.style.left = `${(100 * Math.min(r.done, n)) / n}%`;
+    kart.style.background = r.color;
+    li.querySelector(".ldone")!.textContent = rowInfo(r, n);
+    if (list.children[i] !== li) list.insertBefore(li, list.children[i] ?? null);
+  });
+  for (const li of existing.values()) li.remove();
+}
+
+export function renderNames(list: HTMLElement, names: string[], highlight: string | null): void {
+  list.innerHTML = names.map((name) => `<li class="${name === highlight ? "me" : ""}">${escapeHtml(name)}</li>`).join("");
+}
+
+export function renderHostPlayers(players: { id: string; name: string; connected: boolean }[]): void {
+  el("host-count").textContent = players.length ? t("mpPlayers", { n: players.length }) : t("mpWaitingPlayers");
+  el("host-players").innerHTML = players
+    .map(
+      (p) =>
+        `<li class="${p.connected ? "" : "offline"}">${escapeHtml(p.name)}` +
+        `<button class="kick" data-kick="${escapeHtml(p.id)}" title="${t("mpKick")}" aria-label="${t("mpKick")}">✕</button></li>`,
+    )
+    .join("");
+}
+
+export function renderHostSettings(settings: RoomSettings): void {
+  for (const cup of CUPS) {
+    const b = document.querySelector<HTMLElement>(`[data-host-cup="${cup.id}"]`)!;
+    b.textContent = `${cup.icon} ${t(`cup.${cup.id}`)}`;
+    b.classList.toggle("selected", cup.id === settings.cup);
+  }
+  document.querySelectorAll<HTMLElement>("[data-host-n]").forEach((b) => {
+    b.classList.toggle("selected", Number(b.dataset.hostN) === settings.n);
+  });
+  document.querySelectorAll<HTMLElement>("[data-host-difficulty]").forEach((b) => {
+    const d = b.dataset.hostDifficulty as Difficulty;
+    b.querySelector("small")!.textContent = t("secondsPerQuestion", { s: DIFFICULTIES[d] });
+    b.classList.toggle("selected", d === settings.difficulty);
+  });
 }
 
 export type BoardKind = "last" | "high";

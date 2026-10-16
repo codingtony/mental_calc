@@ -4,6 +4,8 @@ export interface Kart {
   root: TransformNode;
   wheels: Mesh[];
   flame: Mesh;
+  /** Recolours body and driver suit. */
+  paint(color: Color3): void;
 }
 
 function material(scene: Scene, name: string, color: Color3): StandardMaterial {
@@ -72,5 +74,12 @@ export function createKart(scene: Scene, name: string, color: Color3): Kart {
   flame.rotation.x = -Math.PI / 2; // tip points toward −z
   flame.isVisible = false;
 
-  return { root, wheels, flame };
+  const paint = (c: Color3): void => {
+    bodyMat.diffuseColor = c;
+    bodyMat.emissiveColor = c.scale(0.25);
+    darkMat.diffuseColor = c.scale(0.55);
+    darkMat.emissiveColor = c.scale(0.55 * 0.25);
+  };
+
+  return { root, wheels, flame, paint };
 }

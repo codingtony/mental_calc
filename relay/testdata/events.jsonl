@@ -1,0 +1,6 @@
+{"event":"room_closed","ts":"2026-10-15T10:00:00Z","room_id":"r1","opened_at":"2026-10-15T09:50:00Z","duration_s":600,"races":2,"max_players":10,"total_joins":11,"reconnects":1,"close_reason":"host_gone"}
+{"event":"room_closed","ts":"2026-10-10T10:00:00Z","room_id":"r2","opened_at":"2026-10-10T09:40:00Z","duration_s":1200,"races":1,"max_players":20,"total_joins":20,"reconnects":0,"close_reason":"idle"}
+{"event":"race_ended","ts":"2026-10-15T09:55:00Z","room_id":"r1","race_no":1,"players":10,"n":30,"cup":"mul","difficulty":"easy","duration_s":100,"finished":8,"crashed":2,"dnf":0,"ended_by":"all_done"}
+{"event":"race_ended","ts":"2026-10-15T09:59:00Z","room_id":"r1","race_no":2,"players":10,"n":30,"cup":"mul","difficulty":"easy","duration_s":200,"finished":7,"crashed":1,"dnf":2,"ended_by":"host"}
+{"event":"race_ended","ts":"2026-10-10T09:50:00Z","room_id":"r2","race_no":1,"players":20,"n":10,"cup":"add","difficulty":"hard","duration_s":50,"finished":20,"crashed":0,"dnf":0,"ended_by":"all_done"}
+not json

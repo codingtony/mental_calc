@@ -14,6 +14,7 @@ import {
 } from "@babylonjs/core";
 import { LANE_OFFSETS, PLAYER_COLOR, RIVALS } from "./config";
 import { createKart, type Kart } from "./kart";
+import { mulberry32 } from "./rng";
 import { Track } from "./track";
 
 export type WorldMode = "intro" | "menu" | "race" | "finish" | "crash";
@@ -35,17 +36,6 @@ const WHEEL_RADIUS = 0.35;
 const INTRO_CUT_SECONDS = 1.8;
 const INTRO_SECONDS = 4;
 const BASE_FOV = 0.9;
-
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 function smoothstep(x: number): number {
   const c = Math.min(1, Math.max(0, x));
@@ -141,6 +131,18 @@ export class World {
       this.placeKart(i, 0, LANE_OFFSETS[i], 0, 0);
     }
     this.snapCamera = true;
+  }
+
+  /**
+   * Multiplayer: recolours karts 1..k with the given colours and hides the rest.
+   * `null` restores the AI rival colours and shows all karts (solo).
+   */
+  setRivalSlots(colors: readonly (readonly number[])[] | null): void {
+    for (let i = 1; i < this.karts.length; i++) {
+      const c = colors === null ? RIVALS[i - 1].color : colors[i - 1];
+      if (c !== undefined) this.karts[i].paint(new Color3(c[0], c[1], c[2]));
+      this.karts[i].root.setEnabled(c !== undefined);
+    }
   }
 
   /** Player's visual distance along the track in world units. */

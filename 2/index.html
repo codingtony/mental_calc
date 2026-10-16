@@ -54,6 +54,10 @@
         </div>
 
         <button id="next-btn" class="big-btn" data-i18n="next"></button>
+        <div class="choices">
+          <button id="host-btn" class="secondary-btn" data-i18n="mpHost"></button>
+          <button id="join-btn" class="secondary-btn" data-i18n="mpJoin"></button>
+        </div>
       </div>
     </section>
 
@@ -72,6 +76,83 @@
       </div>
     </section>
 
+    <section id="screen-join" class="screen hidden">
+      <div class="panel">
+        <h2 class="heading" data-i18n="mpJoin"></h2>
+        <label class="field-label" for="join-code" data-i18n="mpCodeLabel"></label>
+        <input id="join-code" class="text-input code-input" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        <label class="field-label" for="join-name" data-i18n="nameLabel"></label>
+        <input id="join-name" class="text-input" maxlength="16" autocomplete="off" data-i18n-placeholder="namePlaceholder" />
+        <p id="join-error" class="error"></p>
+        <button id="join-go" class="big-btn" data-i18n="mpJoinGo"></button>
+        <button id="join-back" class="secondary-btn" data-i18n="back"></button>
+      </div>
+    </section>
+
+    <section id="screen-wait" class="screen hidden">
+      <div class="panel">
+        <h2 id="wait-code" class="heading room-code"></h2>
+        <p id="wait-caption" class="subtle"></p>
+        <ul id="wait-names" class="names"></ul>
+        <button id="wait-leave" class="secondary-btn" data-i18n="mpLeave"></button>
+      </div>
+    </section>
+
+    <section id="screen-host" class="screen hidden">
+      <div class="panel host">
+        <div id="host-lobby">
+          <div class="host-join">
+            <div>
+              <p class="field-label" data-i18n="mpCodeLabel"></p>
+              <div id="host-code" class="room-code big"></div>
+              <p class="subtle"><span data-i18n="mpScanToJoin"></span><br /><b id="host-url"></b></p>
+            </div>
+            <img id="host-qr" alt="" width="220" height="220" />
+          </div>
+          <p class="field-label" data-i18n="mpRace"></p>
+          <div class="choices">
+            <button class="choice" data-host-cup="add"></button>
+            <button class="choice" data-host-cup="addsub"></button>
+            <button class="choice" data-host-cup="mul"></button>
+            <button class="choice" data-host-cup="muldiv"></button>
+            <button class="choice" data-host-cup="all"></button>
+          </div>
+          <div class="choices">
+            <button class="choice" data-host-n="10"><span>10</span><small data-i18n="questionsWord"></small></button>
+            <button class="choice" data-host-n="30"><span>30</span><small data-i18n="questionsWord"></small></button>
+            <button class="choice" data-host-n="50"><span>50</span><small data-i18n="questionsWord"></small></button>
+            <button class="choice" data-host-n="120"><span>120</span><small data-i18n="questionsWord"></small></button>
+          </div>
+          <div class="choices">
+            <button class="choice" data-host-difficulty="easy"><span data-i18n="easy"></span><small></small></button>
+            <button class="choice" data-host-difficulty="medium"><span data-i18n="medium"></span><small></small></button>
+            <button class="choice" data-host-difficulty="hard"><span data-i18n="hard"></span><small></small></button>
+          </div>
+          <p id="host-count" class="field-label"></p>
+          <ul id="host-players" class="names"></ul>
+          <div class="choices">
+            <button id="host-start" class="big-btn" data-i18n="mpStart"></button>
+            <button id="host-close" class="secondary-btn" data-i18n="mpCloseRoom"></button>
+          </div>
+        </div>
+        <div id="host-board" class="hidden">
+          <div class="host-bar">
+            <span id="host-room" class="room-code"></span>
+            <span id="host-counter"></span>
+            <span id="host-timer"></span>
+          </div>
+          <div id="host-podium" class="podium-wrap hidden"></div>
+          <ol id="lanes"></ol>
+          <label class="checkbox"><input id="host-showall" type="checkbox" /> <span data-i18n="mpShowAll"></span></label>
+          <div class="choices">
+            <button id="host-end" class="big-btn" data-i18n="mpEnd"></button>
+            <button id="host-rematch" class="big-btn" data-i18n="mpRematch"></button>
+            <button id="host-close2" class="secondary-btn" data-i18n="mpCloseRoom"></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="hud" class="hidden">
       <div id="question">
         <div id="question-text"></div>
@@ -87,6 +168,7 @@
         <div id="goal-time"></div>
         <div id="lap"></div>
         <div id="qcount"></div>
+        <div id="mp-me"></div>
       </div>
       <ol id="standings"></ol>
       <div id="lives"><span>❤️</span><span>❤️</span><span>❤️</span></div>
@@ -105,9 +187,12 @@
 
     <div id="banner" class="hidden"></div>
 
+    <div id="mp-offline" class="hidden" data-i18n="mpReconnecting"></div>
+
     <section id="screen-results" class="screen hidden">
       <div class="panel wide">
         <h2 id="result-title" class="heading"></h2>
+        <div id="mp-podium" class="podium-wrap hidden"></div>
         <div id="result-position"></div>
         <dl id="result-stats"></dl>
         <div class="tabs">
@@ -119,6 +204,7 @@
           <button id="again-btn" class="big-btn" data-i18n="raceAgain"></button>
           <button id="cups-btn" class="secondary-btn" data-i18n="changeCup"></button>
           <button id="menu-btn" class="secondary-btn" data-i18n="menu"></button>
+          <button id="mp-leave-btn" class="secondary-btn hidden" data-i18n="mpLeave"></button>
         </div>
       </div>
     </section>

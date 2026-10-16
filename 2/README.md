@@ -21,10 +21,44 @@ Vite + TypeScript + Babylon.js; all 3D geometry, music and sound effects are gen
 
 Questions come from the v1 engine (`src/questions.ts`, ported from the root `game.js`) with v1's default operand ranges.
 
+## Class race (multiplayer)
+
+Up to 30 kids race each other on the same questions through a small WebSocket relay
+(`../relay`, protocol in `../relay/PROTOCOL.md`). Nothing is stored: multiplayer races never
+appear in "Last races" or "High scores".
+
+### Teacher guide
+
+1. **Host**: open the game on the projected computer, press **Host a race** on the first screen.
+   A 5-character code and a QR code appear.
+2. **Share the code**: kids scan the QR code (it opens the game with the code filled in) or press
+   **Join a race** and type the code, then their name. Their names show up in your list; ✕ removes one.
+3. **Start**: pick the cup, number of questions and difficulty, then **Start the race**. Every kid
+   gets the same questions. Wrong answers work as in solo: retry, and the 4th one crashes the kart.
+   Your screen shows the lanes of the top 5; tick **Show all players** to see everyone.
+   The race ends by itself when everyone has finished or crashed, or when you press **End the race**.
+4. **Rematch**: on the podium screen press **Rematch**: everyone goes back to the waiting room with
+   new questions, nobody types the code again. Change the settings if you like and start again.
+
+If you reload your tab, the room comes back (same code, same players) as long as you return
+within 2 minutes. A kid whose Wi-Fi drops is shown as disconnected, keeps their place and
+carries on automatically when the connection returns.
+
+Ranking: finished kids by finish time, then racing kids by answers (ties: who got there first),
+then crashed kids by answers (ties: who lasted longer). Each device times itself, so network lag
+does not matter.
+
+### Relay URL
+
+Default `wss://mc-relay.learnsvenska.com/ws`. Override at build time with `VITE_RELAY_URL`, or per
+tab with `?relay=ws://localhost:8010/ws` (the relay's `ALLOWED_ORIGINS` must include the page's host).
+
 ## Storage
 
 localStorage keys `mcgp.prefs` (name, language, last settings, audio toggles) and `mcgp.games`
 (the last 200 races). The first visit prefills the name from v1's `name` key; v1's own keys are never written.
+sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `mcgp.mp.player`
+(room code, player token) let a reloaded tab rejoin its class race.
 
 ## Source layout
 
@@ -35,9 +69,14 @@ localStorage keys `mcgp.prefs` (name, language, last settings, audio toggles) an
 | `src/world.ts`, `src/track.ts`, `src/kart.ts` | Babylon scene, circuit, karts, cameras and effects |
 | `src/audio.ts` | WebAudio music sequencer and sound effects |
 | `src/storage.ts`, `src/i18n.ts`, `src/ui.ts` | Persistence, translations, DOM rendering |
+| `src/rng.ts` | Seeded PRNG (`mulberry32`): same seed → same questions on every device |
+| `src/net/protocol.ts` | Relay message types (mirror of `../relay/PROTOCOL.md`) |
+| `src/net/connection.ts` | WebSocket wrapper: reconnect with backoff, ping, session tokens |
+| `src/net/standings.ts` | Host-side ranking and the 2-per-second standings throttle |
+| `src/net/room.ts` | Host room (authoritative standings) and player room state |
 | `src/main.ts` | Screen state machine and render loop |
 
-In dev mode, `window.__mc` exposes `session()`, `solve()` and `fail()` for console testing.
+In dev mode, `window.__mc` exposes `session()`, `solve()`, `fail()`, `host()` and `player()` for console testing.
 
 ## Dev
 
@@ -47,3 +86,7 @@ npm run dev
 ## Build
 
 npm run build
+
+## Test
+
+npm test
