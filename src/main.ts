@@ -59,7 +59,7 @@ const COUNTDOWN_STEP_MS = 1000;
 const FINISH_TO_RESULTS_MS = 3000;
 const CRASH_TO_RESULTS_MS = 2500;
 const ROOM_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
-const PROD_JOIN_URL = "https://maths.codingtony.com/2/";
+const PROD_JOIN_URL = "https://maths.codingtony.com/";
 /** Rival karts in multiplayer: the other players of the top 5. */
 const MP_KART_SLOTS = TOP_N;
 

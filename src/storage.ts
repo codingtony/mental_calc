@@ -1,7 +1,7 @@
 import { CATEGORIES, CUPS, DIFFICULTIES, type Category, type CupId, type Difficulty } from "./config";
 import { LANGS, type Lang } from "./i18n";
 
-// Prefixed keys: v1 at the site root shares this origin and owns "highscore", "name", etc.
+// Prefixed keys: v1 (served at /1/) shares this origin and owns "highscore", "name", etc.
 const PREFS_KEY = "mcgp.prefs";
 const GAMES_KEY = "mcgp.games";
 const MAX_GAMES = 200;

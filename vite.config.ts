@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import viteCompression from "vite-plugin-compression";
 
 export default defineConfig({
-  // Relative asset URLs: the bundle is served from /2/, not the site root.
+  // Relative asset URLs: the bundle works at / and in any subpath.
   base: "./",
   plugins: [
     // Pre-gzip assets for S3 static hosting: CI strips the .gz suffix and

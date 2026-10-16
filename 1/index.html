@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Mental Calc</title>
+    <link rel="stylesheet" href="https://unpkg.com/xterm@5.2.0/css/xterm.css" />
+    <link rel="stylesheet" href="style.css?v=__VERSION__" />
+  </head>
+  <body>
+    <form id="questions" class="maindiv">
+      <h1>Welcome to Mental Math!</h1>
+      <div>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" value="" required />
+      </div>
+      <div>
+        <label for="numQuestions">Number of Questions (1-500):</label>
+        <input
+          type="text"
+          inputmode="numeric"
+          id="numQuestions"
+          name="numQuestions"
+          autocomplete="off"
+        />
+        <span id="numQuestions-error" class="error"></span>
+      </div>
+      <details id="settings">
+        <summary>Settings: <span id="settings-summary"></span></summary>
+        <fieldset id="ops">
+          <legend>Operations</legend>
+          <label><input type="checkbox" name="op" value="1" /> Addition</label>
+          <label><input type="checkbox" name="op" value="2" /> Subtraction</label>
+          <label><input type="checkbox" name="op" value="4" /> Multiplication</label>
+          <label><input type="checkbox" name="op" value="8" /> Division</label>
+          <span id="ops-error" class="error"></span>
+        </fieldset>
+        <fieldset id="ranges">
+          <legend>Ranges</legend>
+          <div data-ops="1">
+            <label for="maxAdd">Addition, numbers up to: <output id="maxAdd-value" for="maxAdd"></output></label>
+            <input type="range" id="maxAdd" name="maxAdd" min="1" max="20" step="1" data-fields="maxAdd1 maxAdd2" />
+          </div>
+          <div data-ops="2">
+            <label for="maxSub">Subtraction, numbers up to: <output id="maxSub-value" for="maxSub"></output></label>
+            <input type="range" id="maxSub" name="maxSub" min="2" max="20" step="1" data-fields="maxSub1 maxSub2" />
+          </div>
+          <div data-ops="12">
+            <label for="maxMulDiv">Mult/Div, factors up to: <output id="maxMulDiv-value" for="maxMulDiv"></output></label>
+            <input type="range" id="maxMulDiv" name="maxMulDiv" min="2" max="20" step="1" data-fields="maxMulDiv1 maxMulDiv2" />
+          </div>
+        </fieldset>
+        <div>
+          <label for="timePerQuestion"
+            >Time per question:
+            <output id="timePerQuestion-value" for="timePerQuestion"></output
+          ></label>
+          <input
+            type="range"
+            id="timePerQuestion"
+            name="timePerQuestion"
+            min="1"
+            max="10"
+            step="1"
+            data-unit=" s"
+          />
+        </div>
+      </details>
+      <div>
+        <button type="submit" id="start-btn">Start!</button>
+      </div>
+      <p class="v2-link"><a href="../">🏎️ Try the new race game (v2)!</a></p>
+    </form>
+
+    <div class="hidden" id="terminal-div"></div>
+    <div class="hidden" id="finish">
+      <div>
+        <h1>Results</h1>
+        <div id="result"></div>
+        <div id="leaderboard">
+          <h1 id="leaderboard-title">Last games</h1>
+          <ul id="leaderboard-list"></ul>
+        </div>
+        <div>
+          <button id="again-btn">Play again!</button>
+        </div>
+        <div id="config"></div>
+      </div>
+    </div>
+    <div id="version" class="hidden">__VERSION__</div>
+    <script src="https://unpkg.com/xterm@5.2.0/lib/xterm.js"></script>
+    <script src="game.js?v=__VERSION__"></script>
+    <script src="term.js?v=__VERSION__"></script>
+    <script src="main.js?v=__VERSION__"></script>
+  </body>
+</html>

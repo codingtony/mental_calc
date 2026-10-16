@@ -1,6 +1,6 @@
 async function getVersion() {
   try {
-      const response = await fetch('/version.json', { cache: 'no-store' });
+      const response = await fetch('version.json', { cache: 'no-store' });
       const data = await response.json();
       const version = data.version;
       return version;

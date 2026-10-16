@@ -1,3 +1,5 @@
 highscore.data
 __pycache__
 version.json
+node_modules
+dist

@@ -1,57 +1,93 @@
-# Mental Calculation training for Kids (and Adults!)
-Small console like game for practicing mental additions, substractions, multiplications and divisions for kids (grade 1 - 3).
+# Mental Calc GP — Game v2
 
-The interface is minimal to reduce distractions. 
-The highscores are stored locally in the local storage of the browser.
+Kart-racing version of the mental-math game, served at the site root `/`. The original console game (v1) lives in `1/`
+and is served at `/1/`; `2/index.html` only redirects the old `/2/` URL (and its `?room=` QR codes) to `/`.
+Vite + TypeScript + Babylon.js; all 3D geometry, music and sound effects are generated in code (no asset files).
 
-## Usage
+## How it plays
 
-The start page lets you choose the operations, the number of questions (1 to 500), the operand ranges (one slider each for addition, subtraction and multiplication/division, up to 20) and the time per question (1 to 10 seconds).
-Each setting is initialized from the URL parameter if present and valid, otherwise from the last game played (local storage), otherwise from the default.
+1. Intro animation (about 4.5 s; tap or press a key to skip).
+2. Setup: driver name, number of questions (10 / 30 / 50 / 120), difficulty
+   (Easy 10 s, Medium 5 s, Hard 3 s per question), music and sound on/off (both off by default), language
+   (Swedish by default, English, French; pick with the flags).
+3. Choose a cup: Plus (+), Plus-Minus (+ −), Times (×), Times-Divide (× ÷) or Star (all four).
+4. Race against 7 rivals. Each rival keeps a fixed pace relative to the goal time
+   (questions × seconds per question). "Max Plus" drives exactly at goal pace, so
+   **finishing in the top 3 means you reached the goal**. Each correct answer boosts
+   your kart forward; while you think, it creeps on at goal pace, then stalls.
+   A wrong answer spins the kart and asks the same question again.
+   The 4th wrong answer crashes the kart (DNF).
+5. Results: position, time, goal and errors, plus "Last races" and "High scores"
+   (high scores are per question count, cup and difficulty; crashed races are excluded).
 
-### Optional parameter : `n`
+Questions come from the v1 engine (`src/questions.ts`, ported from `1/game.js`) with v1's default operand ranges.
 
-Number of questions, from 1 to 500. The default value is 50.
+## Class race (multiplayer)
 
-### Optional parameter : `m`
+Up to 30 kids race each other on the same questions through a small WebSocket relay
+(`relay/`, protocol in `relay/PROTOCOL.md`). Nothing is stored: multiplayer races never
+appear in "Last races" or "High scores".
 
-| mode | description | 
-| - | ----- |
-| 1 | Addition |
-| 2 | Substraction |
-| 3 | Addition and Substraction |
-| 4 | Multiplication |
-| 5 | Multiplication and Addition |
-| 6 | Multiplication and Substraction |
-| 7 | Multiplication, Addition and Substraction |
-| 8 | Division |
-| 9 | Division and Addition |
-| 10 | Division and Substraction |
-| 11 | Division, Addition and Substraction  |
-| 12 | Division and Multiplication |
-| 13 | Division, Multiplication and Addition |
-| 14 | Division, Multiplication and Substraction |
-| 15 (default) | Division, Multiplication, Addition and Substraction |
+### Teacher guide
 
-### Optional parameters : `maxAdd1`, `maxAdd2`, `maxSub1`, `maxSub2`, `maxMulDiv1`, `maxMulDiv2`
+1. **Host**: open the game on the projected computer, press **Host a race** on the first screen.
+   A 5-character code and a QR code appear.
+2. **Share the code**: kids scan the QR code (it opens the game with the code filled in) or press
+   **Join a race** and type the code, then their name. Their names show up in your list; ✕ removes one.
+3. **Start**: pick the cup, number of questions and difficulty, then **Start the race**. Every kid
+   gets the same questions. Wrong answers work as in solo: retry, and the 4th one crashes the kart.
+   Your screen shows the lanes of the top 5; tick **Show all players** to see everyone.
+   The race ends by itself when everyone has finished or crashed, or when you press **End the race**.
+4. **Rematch**: on the podium screen press **Rematch**: everyone goes back to the waiting room with
+   new questions, nobody types the code again. Change the settings if you like and start again.
 
-Controls the maximum operand values, up to 20 (minimum 1 for `maxAdd1`, `maxAdd2`, `maxSub1`; minimum 2 for `maxSub2`, `maxMulDiv1`, `maxMulDiv2`).
-The default value is 10 for `maxAdd1`, `maxAdd2`.
-The default value is 20 for `maxSub1`, `maxSub2` (from 2 - 1 to 20 - 19).
-The default value is 10 for `maxMulDiv1`, `maxMulDiv2`.
+If you reload your tab, the room comes back (same code, same players) as long as you return
+within 2 minutes. A kid whose Wi-Fi drops is shown as disconnected, keeps their place and
+carries on automatically when the connection returns.
 
-Each start-page slider sets both bounds of its operation to the same value. If the two bounds differ (e.g. `maxMulDiv1=3&maxMulDiv2=10`), they are kept as passed until the slider is moved. The slider label shows them as `3/10`.
+Ranking: finished kids by finish time, then racing kids by answers (ties: who got there first),
+then crashed kids by answers (ties: who lasted longer). Each device times itself, so network lag
+does not matter.
 
-### Optional parameter : `t`
+### Relay URL
 
-Number of seconds per question to have a success at the end, from 1 to 10.
-The default value is 3
+Default `wss://mc-relay.learnsvenska.com/ws`. Override at build time with `VITE_RELAY_URL`, or per
+tab with `?relay=ws://localhost:8010/ws` (the relay's `ALLOWED_ORIGINS` must include the page's host).
 
-#### Divisions
-The divisions are built using the `maxMulDiv1` and `maxMulDiv2` parameter indirectly. When building the question bank, the application construct divisions from multiplication. Example : with `2 x 3 = 6` the application construct the following divisions : `6 / 3 = 2` and `6 / 2 = 3`.
+## Storage
 
-### Usage Examples :
+localStorage keys `mcgp.prefs` (name, language, last settings, audio toggles) and `mcgp.games`
+(the last 200 races). The first visit prefills the name from v1's `name` key; v1's own keys are never written.
+sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `mcgp.mp.player`
+(room code, player token) let a reloaded tab rejoin its class race.
 
-Do only multiplications up to 3 : http://maths.codingtony.com/?m=4&maxMulDiv1=3
+## Source layout
 
-It will ask multiplications from 2 x 2 to 3 x 10
+| File | Role |
+| - | - |
+| `src/config.ts` | Categories, difficulties, cups, rivals and their paces |
+| `src/race.ts` | Race rules (progress, positions, errors, finish/crash), no rendering |
+| `src/world.ts`, `src/track.ts`, `src/kart.ts` | Babylon scene, circuit, karts, cameras and effects |
+| `src/audio.ts` | WebAudio music sequencer and sound effects |
+| `src/storage.ts`, `src/i18n.ts`, `src/ui.ts` | Persistence, translations, DOM rendering |
+| `src/rng.ts` | Seeded PRNG (`mulberry32`): same seed → same questions on every device |
+| `src/net/protocol.ts` | Relay message types (mirror of `relay/PROTOCOL.md`) |
+| `src/net/connection.ts` | WebSocket wrapper: reconnect with backoff, ping, session tokens |
+| `src/net/standings.ts` | Host-side ranking and the 2-per-second standings throttle |
+| `src/net/room.ts` | Host room (authoritative standings) and player room state |
+| `src/main.ts` | Screen state machine and render loop |
+
+In dev mode, `window.__mc` exposes `session()`, `solve()`, `fail()`, `host()` and `player()` for console testing.
+
+## Dev
+
+npm install
+npm run dev
+
+## Build
+
+npm run build
+
+## Test
+
+npm test
