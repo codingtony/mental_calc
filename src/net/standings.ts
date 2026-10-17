@@ -1,3 +1,4 @@
+import type { RiderLook } from "../look";
 import type { FinalStandings, PlayerStatus, RankInfo, ReportedStatus, TopRow } from "./protocol";
 
 export const TOP_N = 5;
@@ -15,6 +16,8 @@ export interface PlayerState {
   connected: boolean;
   /** Join order: final tie-breaker so the ranking is stable. */
   order: number;
+  /** Validated rider look from the join message; null = slot default. */
+  look: RiderLook | null;
 }
 
 export interface Standings extends FinalStandings {
@@ -61,7 +64,7 @@ export function computeStandings(players: Iterable<PlayerState>): Standings {
   });
   const top: TopRow[] = ranked
     .slice(0, TOP_N)
-    .map((p) => ({ name: p.name, done: p.done, status: displayStatus(p), ms: p.ms }));
+    .map((p) => ({ name: p.name, done: p.done, status: displayStatus(p), ms: p.ms, ...(p.look ? { look: p.look } : {}) }));
   return { ranked, top, ranks };
 }
 

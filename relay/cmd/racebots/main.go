@@ -44,7 +44,7 @@ const (
 	minSendGap = 60 * time.Millisecond  // between frames on one connection (relay: 20 msg/s)
 	overdueGap = 100 * time.Millisecond // between overdue progress steps after a reconnect
 	wrongP     = 0.08                   // probability of a wrong answer per question
-	maxWrong   = 3                      // wrong answers per race, unless the bot crashes
+	maxWrong   = 2                      // wrong answers per race, unless the bot crashes (the 3rd crashes)
 	maxRedials = 5                      // failed dials in a row before a bot gives up
 )
 

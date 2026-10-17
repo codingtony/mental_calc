@@ -228,7 +228,7 @@ type step struct {
 }
 
 // genScript draws a player's race: an answer speed, occasional wrong
-// answers (retried, as in solo) and sometimes a crash (4th wrong answer).
+// answers (retried, as in solo) and sometimes a crash (3rd wrong answer: 3 lives).
 // Crashes never happen before minRacing correct answers.
 func (sc *scenario) genScript(n, minRacing int) []step {
 	rng := sc.rng
@@ -243,11 +243,11 @@ func (sc *scenario) genScript(n, minRacing int) []step {
 	steps := make([]step, 0, n)
 	for q := range n {
 		t += base * (0.6 + 0.8*rng.Float64())
-		for errs < 4 && (q == crashAt || (q >= minRacing && rng.Float64() < pWrong)) {
+		for errs < 3 && (q == crashAt || (q >= minRacing && rng.Float64() < pWrong)) {
 			errs++
 			t += base * (0.3 + 0.4*rng.Float64())
 		}
-		if errs >= 4 {
+		if errs >= 3 {
 			return append(steps, step{Done: q, Status: stCrashed, Ms: math.Round(t)})
 		}
 		st := stRacing

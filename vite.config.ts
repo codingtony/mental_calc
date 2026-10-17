@@ -10,6 +10,9 @@ export default defineConfig({
     viteCompression({
       algorithm: "gzip",
       threshold: 0,
+      // Default filter skips .glb; CI labels every dist file gzip, so the
+      // models must be pre-compressed too.
+      filter: /\.(js|mjs|json|css|html|glb)$/i,
       deleteOriginFile: true,
     }),
   ],

@@ -17,8 +17,10 @@ type Settings = { cup: "add" | "addsub" | "mul" | "muldiv" | "all"; n: 10 | 30 |
                   difficulty: "easy" | "medium" | "hard" };   // opaque to the relay, except that
                                                             // cup/n/difficulty feed the usage events
 type Status = "racing" | "finished" | "crashed" | "disconnected";
-type TopRow = { name: string; done: number; status: Status; ms: number };   // ms = finish, crash or
-                                                                           // last-answer time
+type TopRow = { name: string; done: number; status: Status; ms: number;   // ms = finish, crash or
+                look?: Look };                                            // last-answer time
+type Look   = { body: "girl" | "boy"; bike: Rgb; suit: Rgb; helmet: "classic" | "mirror";
+                helmetColor: Rgb };   // opaque to the relay; Rgb = [r, g, b] in 0..1
 type Rank   = { rank: number; of: number; done: number; status: Status };
 type Phase  = "lobby" | "racing" | "ended";
 ```
@@ -31,9 +33,9 @@ tokens in `sessionStorage` to reconnect.
 | Message | Effect |
 |---|---|
 | `create {settings}` | Opens a room. Reply: `created {code, hostToken, phase: "lobby"}`. |
-| `create {code, hostToken}` | Resumes a room after a reload (allowed during the 2 min grace and while another host tab is connected; that tab is closed with code 4001). Reply: `created {code, hostToken, phase}`, then for every known player in join order: `player_joined {playerId, name}`, followed by `player_left {playerId, reason: "disconnected"}` if offline, and the latest `progress` if `phase` is `racing`. Errors: `not_found`, `bad_token`. |
+| `create {code, hostToken}` | Resumes a room after a reload (allowed during the 2 min grace and while another host tab is connected; that tab is closed with code 4001). Reply: `created {code, hostToken, phase}`, then for every known player in join order: `player_joined {playerId, name, look?}`, followed by `player_left {playerId, reason: "disconnected"}` if offline, and the latest `progress` if `phase` is `racing`. Errors: `not_found`, `bad_token`. |
 | `start {seed, settings, countdownMs}` | Only in `lobby`. `settings` replaces the room settings. Every connected player gets `started {seed, settings, countdownMs}`; from then on new players are rejected (`started`). |
-| `standings {v, top: TopRow[5], ranks: {[playerId]: Rank}}` | Only in `racing`. Throttle ≤ 2/s. Each racing player gets `standings {v, top, me}` with `me = ranks[playerId]` (or `null`). |
+| `standings {v, top: TopRow[5], ranks: {[playerId]: Rank}}` | Only in `racing`. Throttle ≤ 2/s. Each racing player gets `standings {v, top, me}` with `me = ranks[playerId]` (or `null`). `top` rows (with their optional `look`, built by the host from `player_joined`) are passed through unchanged. |
 | `end {final: {top, ranks}}` | Only in `racing`. Phase → `ended`. Each player gets `ended {top, me}`. |
 | `kick {playerId}` | Player gets `kicked {}` and is closed with code 4000; its token is forgotten. Host gets `player_left {playerId, reason: "kicked"}`. Unknown ids are ignored. |
 | `rematch {seed}` | Only in `racing` or `ended`. Phase → `lobby`, joins are open again, players keep their ids and tokens. Players get `rematch {}` and a `lobby` update. The host then sends `start` (the relay does not use `seed` here). |
@@ -42,13 +44,14 @@ tokens in `sessionStorage` to reconnect.
 
 | Message | Effect |
 |---|---|
-| `join {code, name, playerToken?}` | `code` is case-insensitive. `name` is trimmed, control characters are stripped and it is cut to 32 characters. Reply: `joined {playerId, playerToken, settings, phase, seed?}` (`seed` when `phase` ≠ `lobby`). A known `playerToken` reconnects the same player (also mid-race, if the player was in the race) and keeps the original name; an unknown token is ignored (fresh join). After a reconnect the player also gets the latest personal `standings` (racing) or `ended` (ended). If the token is already connected elsewhere, that socket is closed with code 4001. Errors: `not_found`, `full`, `started`, `bad_name`, `name_taken` (another connected player in the room already uses this name, case-insensitive). |
+| `join {code, name, playerToken?, look?}` | `code` is case-insensitive. `name` is trimmed, control characters are stripped and it is cut to 32 characters. `look` (optional `Look`) is opaque: kept if it is a JSON object of at most 512 bytes and forwarded to the host in `player_joined`; anything else is dropped and the join still succeeds. Reply: `joined {playerId, playerToken, settings, phase, seed?}` (`seed` when `phase` ≠ `lobby`). A known `playerToken` reconnects the same player (also mid-race, if the player was in the race) and keeps the original name and look; an unknown token is ignored (fresh join). After a reconnect the player also gets the latest personal `standings` (racing) or `ended` (ended). If the token is already connected elsewhere, that socket is closed with code 4001. Errors: `not_found`, `full`, `started`, `bad_name`, `name_taken` (another connected player in the room already uses this name, case-insensitive). |
 | `progress {done, status, elapsedMs}` | Send on every correct answer, crash and finish. `status`: `racing \| finished \| crashed`; `elapsedMs` from the local start (end of the countdown). Forwarded to the host as `progress {playerId, done, status, elapsedMs}`. Silently dropped outside `racing` or from a player not in the race. |
 
 ## Relay → host
 
 - `created {code, hostToken, phase}`
-- `player_joined {playerId, name, reconnect?: true}`
+- `player_joined {playerId, name, reconnect?: true, look?: Look}` (`look` as sent in the fresh join, unvalidated beyond
+  "object ≤ 512 bytes": the host must validate it)
 - `player_left {playerId, reason: "disconnected" | "kicked"}`. A disconnected player can come back with
   its token; the host keeps its last state.
 - `progress {playerId, done, status, elapsedMs}`

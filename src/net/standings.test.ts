@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { RiderLook } from "../look";
 import { computeStandings, StandingsThrottle, type PlayerState } from "./standings";
 
 let order = 0;
 function player(id: string, p: Partial<PlayerState>): PlayerState {
-  return { id, name: id, done: 0, status: "racing", ms: 0, connected: true, order: order++, ...p };
+  return { id, name: id, done: 0, status: "racing", ms: 0, connected: true, order: order++, ...p, look: p.look ?? null };
 }
 
 const ids = (players: PlayerState[]) => computeStandings(players).ranked.map((p) => p.id);
@@ -76,6 +77,13 @@ describe("computeStandings", () => {
     expect(s.top[0]).toEqual({ name: "p7", done: 7, status: "racing", ms: 7000 });
     expect(Object.keys(s.ranks)).toHaveLength(8);
     expect(s.ranks.p0).toEqual({ rank: 8, of: 8, done: 0, status: "racing" });
+  });
+
+  it("carries a known look in top rows and omits it otherwise", () => {
+    const look: RiderLook = { body: "boy", bike: [0, 0, 1], suit: [0, 0, 1], helmet: "mirror", helmetColor: [1, 1, 0] };
+    const s = computeStandings([player("styled", { done: 2, look }), player("plain", { done: 1 })]);
+    expect(s.top[0].look).toEqual(look);
+    expect("look" in s.top[1]).toBe(false);
   });
 });
 

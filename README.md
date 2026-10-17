@@ -1,8 +1,9 @@
 # Mental Calc GP — Game v2
 
-Kart-racing version of the mental-math game, served at the site root `/`. The original console game (v1) lives in `1/`
+Motorcycle-racing version of the mental-math game, served at the site root `/`. The original console game (v1) lives in `1/`
 and is served at `/1/`; `2/index.html` only redirects the old `/2/` URL (and its `?room=` QR codes) to `/`.
-Vite + TypeScript + Babylon.js; all 3D geometry, music and sound effects are generated in code (no asset files).
+Vite + TypeScript + Babylon.js; the motos, riders and circuit props are free glTF models in `src/assets/models/`
+(CC0 / CC-BY, see its `CREDITS.md`); the track, sky, music and sound effects are generated in code.
 
 ## How it plays
 
@@ -14,9 +15,9 @@ Vite + TypeScript + Babylon.js; all 3D geometry, music and sound effects are gen
 4. Race against 7 rivals. Each rival keeps a fixed pace relative to the goal time
    (questions × seconds per question). "Max Plus" drives exactly at goal pace, so
    **finishing in the top 3 means you reached the goal**. Each correct answer boosts
-   your kart forward; while you think, it creeps on at goal pace, then stalls.
-   A wrong answer spins the kart and asks the same question again.
-   The 4th wrong answer crashes the kart (DNF).
+   your moto forward; while you think, it creeps on at goal pace, then stalls.
+   A wrong answer spins the moto and asks the same question again.
+   You have 3 hearts: each wrong answer costs one, and losing the last one crashes the moto (DNF).
 5. Results: position, time, goal and errors, plus "Last races" and "High scores"
    (high scores are per question count, cup and difficulty; crashed races are excluded).
 
@@ -35,7 +36,7 @@ appear in "Last races" or "High scores".
 2. **Share the code**: kids scan the QR code (it opens the game with the code filled in) or press
    **Join a race** and type the code, then their name. Their names show up in your list; ✕ removes one.
 3. **Start**: pick the cup, number of questions and difficulty, then **Start the race**. Every kid
-   gets the same questions. Wrong answers work as in solo: retry, and the 4th one crashes the kart.
+   gets the same questions. Wrong answers work as in solo: retry, and the 3rd one crashes the moto.
    Your screen shows the lanes of the top 5; tick **Show all players** to see everyone.
    The race ends by itself when everyone has finished or crashed, or when you press **End the race**.
 4. **Rematch**: on the podium screen press **Rematch**: everyone goes back to the waiting room with
@@ -54,6 +55,13 @@ does not matter.
 Default `wss://mc-relay.learnsvenska.com/ws`. Override at build time with `VITE_RELAY_URL`, or per
 tab with `?relay=ws://localhost:8010/ws` (the relay's `ALLOWED_ORIGINS` must include the page's host).
 
+## Graphics quality
+
+At load the game measures the frame rate for 2 s (during the intro) and, on a slow device, lowers
+the quality: level 1 = smaller/softer moto shadows, 2 = also renders at ⅔ resolution, 3 = no moto
+shadows and ½ resolution. It checks once more after a drop. The browser console logs the result
+(`[quality] 60 fps → level 0`). Force a level per tab with `?quality=0` … `?quality=3`.
+
 ## Storage
 
 localStorage keys `mcgp.prefs` (name, language, last settings, audio toggles) and `mcgp.games`
@@ -67,8 +75,13 @@ sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `m
 | - | - |
 | `src/config.ts` | Categories, difficulties, cups, rivals and their paces |
 | `src/race.ts` | Race rules (progress, positions, errors, finish/crash), no rendering |
-| `src/world.ts`, `src/track.ts`, `src/kart.ts` | Babylon scene, circuit, karts, cameras and effects |
-| `src/audio.ts` | WebAudio music sequencer and sound effects |
+| `src/world.ts`, `src/track.ts`, `src/moto.ts`, `src/helmet.ts` | Babylon scene, circuit, motos/riders, cameras and effects |
+| `src/assets.ts`, `src/assets/models/` | glTF loading, prefabs (thin instances), moto template; models + `CREDITS.md` |
+| `src/look.ts`, `src/theme.ts` | Rider look (bike/suit/helmet, sent to multiplayer rooms) and scenery theme data |
+| `src/quality.ts` | Load-time frame-rate probe that lowers graphics quality on slow devices |
+| `src/audio.ts` | `GameAudio`: master bus, song playback (menu, per-circuit race song, results jingles), sound effects, motorbike engine with gears |
+| `src/music.ts`, `src/songs.ts` | Song notation compiler and the composed songs (`SONGS`); a circuit's `SceneryTheme.raceSong` picks its race music |
+| `src/synth.ts` | WebAudio instrument voices, per-song mixer (reverb, delay) and noise/envelope helpers |
 | `src/storage.ts`, `src/i18n.ts`, `src/ui.ts` | Persistence, translations, DOM rendering |
 | `src/rng.ts` | Seeded PRNG (`mulberry32`): same seed → same questions on every device |
 | `src/net/protocol.ts` | Relay message types (mirror of `relay/PROTOCOL.md`) |

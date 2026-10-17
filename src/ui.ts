@@ -225,7 +225,7 @@ export interface LaneRow {
   color: string;
 }
 
-/** Teacher's 2D lane board. Keyed by player id so karts glide (CSS transition) instead of re-rendering. */
+/** Teacher's 2D lane board. Keyed by player id so motos glide (CSS transition) instead of re-rendering. */
 export function renderLanes(list: HTMLElement, rows: LaneRow[], n: number): void {
   const existing = new Map<string, HTMLElement>();
   for (const li of Array.from(list.children) as HTMLElement[]) existing.set(li.dataset.id!, li);
@@ -235,14 +235,14 @@ export function renderLanes(list: HTMLElement, rows: LaneRow[], n: number): void
     else {
       li = document.createElement("li");
       li.dataset.id = r.id;
-      li.innerHTML = `<span class="rank"></span><span class="lname"></span><div class="track"><span class="kart"></span></div><span class="ldone"></span>`;
+      li.innerHTML = `<span class="rank"></span><span class="lname"></span><div class="track"><span class="moto"></span></div><span class="ldone"></span>`;
     }
     li.className = `lane ${r.status}`;
     li.querySelector(".rank")!.textContent = String(r.rank);
     li.querySelector(".lname")!.textContent = r.name;
-    const kart = li.querySelector<HTMLElement>(".kart")!;
-    kart.style.left = `${(100 * Math.min(r.done, n)) / n}%`;
-    kart.style.background = r.color;
+    const moto = li.querySelector<HTMLElement>(".moto")!;
+    moto.style.left = `${(100 * Math.min(r.done, n)) / n}%`;
+    moto.style.background = r.color;
     li.querySelector(".ldone")!.textContent = rowInfo(r, n);
     if (list.children[i] !== li) list.insertBefore(li, list.children[i] ?? null);
   });
@@ -272,7 +272,8 @@ export function attachScrollHint(list: HTMLElement, up: HTMLElement, down: HTMLE
   };
   list.addEventListener("scroll", update, { passive: true });
   new ResizeObserver(update).observe(list);
-  new MutationObserver(update).observe(list, { childList: true });
+  // subtree: the score board replaces its table's rows, not the list's children.
+  new MutationObserver(update).observe(list, { childList: true, subtree: true });
   const page = (dir: number) => () => list.scrollBy({ top: dir * list.clientHeight * 0.8, behavior: "smooth" });
   up.addEventListener("click", page(-1));
   down.addEventListener("click", page(1));

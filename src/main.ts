@@ -5,7 +5,7 @@ import { GameAudio } from "./audio";
 import {
   CUPS,
   DIFFICULTIES,
-  PLAYER_COLOR,
+  LIVES,
   RIVALS,
   TARGET_SPEED,
   type Category,
@@ -14,12 +14,14 @@ import {
   type Difficulty,
 } from "./config";
 import { fmtTime, mpErrorText, ordinal, pick, setLang, t, type Lang } from "./i18n";
+import { DEFAULT_PLAYER_LOOK, parseLook, rgbCss, type RiderLook } from "./look";
 import type { RankInfo, TopRow } from "./net/protocol";
 import { COUNTDOWN_MS, HostRoom, PlayerRoom, type HostListener, type PlayerListener, type RaceStart } from "./net/room";
 import { displayStatus, TOP_N } from "./net/standings";
 import { defaultQuestionConfig, generateQuestionBank, pickQuestions } from "./questions";
 import { RaceSession } from "./race";
 import { mulberry32, randomSeed } from "./rng";
+import { MENU_SONG } from "./songs";
 import { addGame, computeScore, cupById, loadPrefs, savePrefs } from "./storage";
 import {
   attachScrollHint,
@@ -45,7 +47,8 @@ import {
   type MpStandingRow,
   type StandingEntry,
 } from "./ui";
-import { World } from "./world";
+import { probeFps, qualityDrop } from "./quality";
+import { QUALITY, World } from "./world";
 
 declare global {
   interface Window {
@@ -62,16 +65,23 @@ const FINISH_TO_RESULTS_MS = 3000;
 const CRASH_TO_RESULTS_MS = 2500;
 const ROOM_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
 const PROD_JOIN_URL = "https://maths.codingtony.com/";
-/** Rival karts in multiplayer: the other players of the top 5. */
-const MP_KART_SLOTS = TOP_N;
+/** Rival motos in multiplayer: the other players of the top 5. */
+const MP_MOTO_SLOTS = TOP_N;
+
+const prefs = loadPrefs();
+setLang(prefs.lang);
+const playerLook = prefs.look ?? DEFAULT_PLAYER_LOOK;
 
 const canvas = el<HTMLCanvasElement>("renderCanvas");
 const engine = new Engine(canvas, true, { stencil: false });
 engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio, 2));
-const world = new World(engine);
+const world = await World.create(engine, playerLook).catch((err: unknown) => {
+  el("boot").textContent = t("loadFailed");
+  throw err;
+});
+el("boot").remove();
 const audio = new GameAudio();
 
-const prefs = loadPrefs();
 audio.setMusic(prefs.music);
 audio.setSound(prefs.sound);
 
@@ -82,6 +92,7 @@ const joinNameEl = el<HTMLInputElement>("join-name");
 const showAllEl = el<HTMLInputElement>("host-showall");
 attachScrollHint(el("host-players"), el("host-players-less"), el("host-players-more"));
 attachScrollHint(el("lanes"), el("lanes-less"), el("lanes-more"));
+attachScrollHint(el("board").parentElement!, el("board-less"), el("board-more"));
 
 let screen: Screen = "intro";
 let session: RaceSession | null = null;
@@ -107,8 +118,8 @@ let hostQrCode = "";
 let hostTimerText = "";
 /** This kid's own result, frozen when the race ended for them. */
 let mpResult: { elapsedMs: number; errors: number; answered: number; numQuestions: number; goalMs: number; finished: boolean } | null = null;
-/** Kart i+1 shows the player named kartSlots[i].name, eased from `shown` towards `target` (answers). */
-let kartSlots: { name: string | null; target: number; shown: number }[] = [];
+/** Moto i+1 shows the player named motoSlots[i].name, eased from `shown` towards `target` (answers). */
+let motoSlots: { name: string | null; look: RiderLook; target: number; shown: number }[] = [];
 
 function later(ms: number, fn: () => void): void {
   timers.push(window.setTimeout(fn, ms));
@@ -132,6 +143,7 @@ function showIntro(): void {
   renderIntroTitle();
   showOnly("screen-intro");
   world.setMode("intro", performance.now());
+  audio.setSong(MENU_SONG);
   later(INTRO_MS, showMenu);
   const skip = () => {
     if (screen === "intro") showMenu();
@@ -147,6 +159,7 @@ function showMenu(): void {
   screen = "menu";
   showOnly("screen-menu");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   el("menu-error").textContent = "";
   renderMenu(prefs);
   el("mp-offline").classList.add("hidden");
@@ -161,6 +174,7 @@ function showSetup(): void {
   screen = "setup";
   showOnly("screen-setup");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   nameEl.value = prefs.name;
   el("name-error").textContent = "";
   renderSetup(prefs);
@@ -242,6 +256,7 @@ function showCups(): void {
   screen = "cups";
   showOnly("screen-cups");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   renderCups(prefs);
 }
 
@@ -290,9 +305,9 @@ function startRace(selected: Cup, mp: RaceStart | null = null): void {
   const bank = generateQuestionBank({ ...defaultQuestionConfig, mode: cup.mode });
   const questions = pickQuestions(bank, raceConfig.category, mulberry32(mp ? mp.seed : randomSeed()));
   session = new RaceSession(questions, timePerQuestion, mp ? [] : RIVALS);
-  // Multiplayer karts appear once the first standings tell who is in the top 5.
+  // Multiplayer motos appear once the first standings tell who is in the top 5.
   world.setRivalSlots(mp ? [] : null);
-  kartSlots = [];
+  motoSlots = [];
   mpResult = null;
 
   const goalSeconds = session.goalMs / 1000;
@@ -301,6 +316,8 @@ function startRace(selected: Cup, mp: RaceStart | null = null): void {
   perQuestion = totalDistance / session.numQuestions;
   world.setupRace(totalDistance);
   world.setMode("race", performance.now());
+  audio.setSong(null); // silent grid; race music starts on GO
+  audio.engine(true, 0); // idle
 
   screen = "race";
   hudPosition = 0;
@@ -308,9 +325,10 @@ function startRace(selected: Cup, mp: RaceStart | null = null): void {
   standingsKey = "";
   lastPlayerDistance = 0;
   showOnly("hud", "countdown");
-  el("lives")
-    .querySelectorAll("span")
-    .forEach((s) => s.classList.remove("lost"));
+  // One heart per life (config LIVES), all full at the start.
+  el("lives").replaceChildren(
+    ...Array.from({ length: LIVES }, () => Object.assign(document.createElement("span"), { textContent: "❤️" })),
+  );
   el("question-text").textContent = "";
   el("question").classList.remove("hidden");
   el("toast").className = "";
@@ -328,7 +346,7 @@ function startRace(selected: Cup, mp: RaceStart | null = null): void {
     answerEl.disabled = false;
     answerEl.focus();
     showQuestion();
-    audio.engine(true, 1);
+    audio.setSong(world.theme.raceSong);
   });
 }
 
@@ -385,6 +403,7 @@ function submitAnswer(value: string): void {
 function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number): void {
   const s = session!;
   audio.engine(false);
+  audio.setSong(null);
   answerEl.disabled = true;
   answerEl.blur();
   el("question").classList.add("hidden");
@@ -471,12 +490,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && screen === "race" && !player) quitRace();
 });
 
-const RIVAL_COLORS = RIVALS.map((r) => rgbCss(r.color));
-const PLAYER_CSS = rgbCss(PLAYER_COLOR);
-
-function rgbCss(c: readonly number[]): string {
-  return `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
-}
+const RIVAL_COLORS = RIVALS.map((r) => rgbCss(r.look.bike));
+const PLAYER_CSS = rgbCss(playerLook.bike);
 
 function updateHud(now: number): void {
   const s = session!;
@@ -539,13 +554,13 @@ function updateMpStandings(s: RaceSession): void {
     hudPosition = me.rank;
   }
   const rows: MpStandingRow[] = top.map((r, i) => {
-    const slot = kartSlots.findIndex((k) => k.name === r.name);
+    const slot = motoSlots.find((k) => k.name === r.name);
     return {
       rank: i + 1,
       name: r.name,
       status: r.status,
       me: i + 1 === me.rank,
-      color: i + 1 === me.rank ? PLAYER_CSS : slot >= 0 ? RIVAL_COLORS[slot] : "#999",
+      color: i + 1 === me.rank ? PLAYER_CSS : slot ? rgbCss(slot.look.bike) : "#999",
     };
   });
   if (me.rank > top.length) rows.push({ rank: me.rank, name: player!.name, status: me.status, me: true, color: PLAYER_CSS });
@@ -553,28 +568,30 @@ function updateMpStandings(s: RaceSession): void {
 }
 
 /**
- * Gives each other top-5 player a rival kart, keeping the same kart (and colour) for the same
- * player across updates. A player pushed out of the top 5 keeps its kart at its last known
+ * Gives each other top-5 player a rival moto, keeping the same moto (and look) for the same
+ * player across updates. A player pushed out of the top 5 keeps its moto at its last known
  * progress until the slot is needed for someone else.
  */
-function assignKartSlots(top: TopRow[], me: RankInfo): void {
-  const want = Math.max(0, Math.min(MP_KART_SLOTS, me.of - 1));
-  if (want !== kartSlots.length) {
-    kartSlots = Array.from({ length: want }, (_, i) => kartSlots[i] ?? { name: null, target: 0, shown: 0 });
-    world.setRivalSlots(RIVALS.slice(0, want).map((r) => r.color));
+function assignMotoSlots(top: TopRow[], me: RankInfo): void {
+  const want = Math.max(0, Math.min(MP_MOTO_SLOTS, me.of - 1));
+  if (want !== motoSlots.length) {
+    motoSlots = Array.from({ length: want }, (_, i) => motoSlots[i] ?? { name: null, look: RIVALS[i].look, target: 0, shown: 0 });
   }
   const others = top.filter((_, i) => i + 1 !== me.rank);
   const names = new Set(others.map((r) => r.name));
   for (const r of others) {
-    let slot = kartSlots.find((k) => k.name === r.name);
+    let slot = motoSlots.find((k) => k.name === r.name);
     if (!slot) {
-      slot = kartSlots.find((k) => k.name === null || !names.has(k.name));
-      if (!slot) continue;
+      const free = motoSlots.findIndex((k) => k.name === null || !names.has(k.name));
+      if (free < 0) continue;
+      slot = motoSlots[free];
       slot.name = r.name;
+      slot.look = parseLook(r.look) ?? RIVALS[free].look;
       slot.shown = r.done;
     }
     slot.target = r.done;
   }
+  world.setRivalSlots(motoSlots.map((s) => s.look));
 }
 
 // ---------- Results ----------
@@ -584,11 +601,14 @@ function showResults(s: RaceSession | null, elapsedMs: number): void {
   screen = "results";
   showOnly("screen-results");
   world.setMode("menu", performance.now());
+  // Kids who drove get a jingle: solo = goal met, class race = reached the finish line.
+  if (s) audio.playJingle((player ? s.status === "finished" : s.won()) ? "jingleWin" : "jingleLose", MENU_SONG);
+  else audio.setSong(MENU_SONG);
   world.setRivalSlots(null);
   const mp = player !== null;
   // Multiplayer games never touch the local high scores: no board, no solo buttons.
   document.querySelector(".tabs")!.classList.toggle("hidden", mp);
-  el("board").parentElement!.classList.toggle("hidden", mp);
+  el("board-box").classList.toggle("hidden", mp);
   for (const id of ["again-btn", "cups-btn", "menu-btn"]) el(id).classList.toggle("hidden", mp);
   el("mp-leave-btn").classList.toggle("hidden", !mp);
   el("mp-podium").classList.toggle("hidden", !mp);
@@ -672,7 +692,7 @@ const playerListener: PlayerListener = {
         startRace(cupById(msg.settings.cup), p.start);
         break;
       case "standings":
-        if (screen === "race") assignKartSlots(p.standings!.top, p.standings!.me);
+        if (screen === "race") assignMotoSlots(p.standings!.top, p.standings!.me);
         else if (screen === "results") renderMpResults();
         else if (screen === "wait") showResults(null, 0);
         break;
@@ -710,6 +730,7 @@ function showJoin(code: string, error = ""): void {
   screen = "join";
   showOnly("screen-join");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   el("mp-offline").classList.add("hidden");
   joinCodeEl.value = code;
   joinNameEl.value = prefs.name;
@@ -732,7 +753,7 @@ function submitJoin(): void {
   }
   prefs.name = name;
   savePrefs(prefs);
-  player = new PlayerRoom(code, name, playerListener);
+  player = new PlayerRoom(code, name, prefs.look, playerListener);
   showWait();
 }
 
@@ -741,6 +762,7 @@ function showWait(): void {
   screen = "wait";
   showOnly("screen-wait");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   renderWait();
 }
 
@@ -801,6 +823,7 @@ function showHost(): void {
   hostTimerText = "";
   showOnly("screen-host");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   renderHost();
 }
 
@@ -855,7 +878,7 @@ function renderHost(): void {
       done: p.done,
       status: displayStatus(p),
       ms: p.ms,
-      color: `hsl(${(p.order * 137) % 360} 75% 50%)`,
+      color: p.look ? rgbCss(p.look.bike) : `hsl(${(p.order * 137) % 360} 75% 50%)`,
     })),
     h.settings.n,
   );
@@ -903,11 +926,11 @@ document.querySelectorAll<HTMLButtonElement>("[data-host-difficulty]").forEach((
 
 // ---------- Render loop ----------
 
-/** Eases each multiplayer rival kart towards its player's last reported answer count. */
+/** Eases each multiplayer rival moto towards its player's last reported answer count. */
 function mpRivalProgress(dt: number): number[] {
   const k = 1 - Math.exp(-dt * 3);
-  for (const slot of kartSlots) slot.shown += (slot.target - slot.shown) * k;
-  return kartSlots.map((slot) => slot.shown);
+  for (const slot of motoSlots) slot.shown += (slot.target - slot.shown) * k;
+  return motoSlots.map((slot) => slot.shown);
 }
 
 engine.runRenderLoop(() => {
@@ -939,9 +962,33 @@ engine.runRenderLoop(() => {
 });
 window.addEventListener("resize", () => engine.resize());
 
+// ---------- Quality ----------
+
+/**
+ * Lowers rendering quality on slow devices (school Chromebooks can't be tested beforehand):
+ * one 2 s probe at load, and one more after a drop. `?quality=0..3` forces a level instead.
+ */
+async function autoQuality(): Promise<void> {
+  await world.scene.whenReadyAsync();
+  const first = await probeFps(world.scene);
+  let level = Math.min(QUALITY.length - 1, qualityDrop(first));
+  let fps = first;
+  if (level > 0) {
+    world.setQuality(level);
+    fps = await probeFps(world.scene);
+    if (qualityDrop(fps) > 0 && level < QUALITY.length - 1) world.setQuality(++level);
+  }
+  console.info(`[quality] ${first.toFixed(0)} fps → level ${level} (${fps.toFixed(0)} fps after)`);
+}
+
+const forcedQuality = Number(new URLSearchParams(location.search).get("quality") ?? NaN);
+if (Number.isInteger(forcedQuality) && forcedQuality >= 0 && forcedQuality < QUALITY.length) world.setQuality(forcedQuality);
+else void autoQuality();
+
 if (import.meta.env.DEV) {
   // Dev-only hook for console/automated verification; routes through the real submit path.
   window.__mc = {
+    audio,
     session: () => session,
     solve: () => submitAnswer(String(session!.currentQuestion()!.answer)),
     fail: () => submitAnswer("99999"),
@@ -950,7 +997,6 @@ if (import.meta.env.DEV) {
   };
 }
 
-setLang(prefs.lang);
 // The QR-code and reload paths skip the menu, which normally fills the HUD audio buttons.
 renderAudioToggles(prefs);
 // A reload resumes this tab's room (host or player); `?room=CODE` (QR code) opens the join screen.
@@ -958,7 +1004,7 @@ const roomParam = new URLSearchParams(location.search).get("room")?.trim().toUpp
 host = HostRoom.resume(hostListener);
 if (host) showHost();
 else {
-  player = PlayerRoom.resume(playerListener, roomParam);
+  player = PlayerRoom.resume(playerListener, roomParam, prefs.look);
   if (player) showWait();
   else if (roomParam) showJoin(roomParam);
   else showIntro();

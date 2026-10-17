@@ -1,4 +1,6 @@
-import { Color3, Color4, Curve3, DynamicTexture, Mesh, MeshBuilder, Scene, StandardMaterial, Vector3 } from "@babylonjs/core";
+import { Color3, Color4, Curve3, DynamicTexture, MeshBuilder, Scene, StandardMaterial, Vector3 } from "@babylonjs/core";
+import { place, type Prefab, type PrefabKey } from "./assets";
+import { mulberry32 } from "./rng";
 
 const CONTROL_POINTS: readonly [number, number][] = [
   [-120, -40],
@@ -14,7 +16,10 @@ const CONTROL_POINTS: readonly [number, number][] = [
 ];
 const ROAD_HALF_WIDTH = 8;
 const CURB_OUTER = 9.4;
-const DASH_SPACING = 8;
+const EDGE_LINE: readonly [number, number] = [7.3, 7.6]; // |lateral| of the white edge lines
+const BARRIER_SPACING = 2.6;
+/** Added to a prop's road-facing yaw when the model's front is −z instead of +z. */
+const FRONT_YAW: Partial<Record<PrefabKey, number>> = {};
 
 export interface TrackPose {
   pos: Vector3;
@@ -29,7 +34,7 @@ function flatMaterial(name: string, color: Color3, scene: Scene): StandardMateri
   return mat;
 }
 
-/** Checkerboard texture with `cols`×`rows` squares (start line + arch banner). */
+/** Checkerboard texture with `cols`×`rows` squares (start line). */
 function checkerTexture(scene: Scene, cols: number, rows: number): DynamicTexture {
   const cell = 32;
   const tex = new DynamicTexture("checker", { width: cols * cell, height: rows * cell }, scene, true);
@@ -50,6 +55,8 @@ export class Track {
   readonly points: readonly Vector3[];
   /** cum[i] = arc length at points[i]; cum[points.length] = length. */
   private readonly cum: number[];
+  /** Unit tangent at each sample (central difference): smooth across segment joints. */
+  private readonly tangents: readonly (readonly [number, number])[];
 
   constructor(scene: Scene) {
     const raw = Curve3.CreateCatmullRomSpline(
@@ -66,6 +73,12 @@ export class Track {
     this.points = pts;
     this.cum = cum;
     this.length = cum[pts.length];
+    this.tangents = pts.map((_, i) => {
+      const prev = pts[(i - 1 + pts.length) % pts.length];
+      const next = pts[(i + 1) % pts.length];
+      const len = Math.hypot(next.x - prev.x, next.z - prev.z) || 1;
+      return [(next.x - prev.x) / len, (next.z - prev.z) / len] as const;
+    });
     this.buildMeshes(scene);
   }
 
@@ -85,27 +98,23 @@ export class Track {
     const b = this.points[(lo + 1) % n];
     const seg = this.cum[lo + 1] - this.cum[lo];
     const f = seg > 0 ? (d - this.cum[lo]) / seg : 0;
-    const dx = b.x - a.x;
-    const dz = b.z - a.z;
-    const tx = seg > 0 ? dx / seg : 0;
-    const tz = seg > 0 ? dz / seg : 1;
+    // Blend the joint tangents: a per-segment direction would make heading (and with it the
+    // moto's yaw, lean and the chase camera) jump at every sample.
+    const [ax, az] = this.tangents[lo];
+    const [bx, bz] = this.tangents[(lo + 1) % n];
+    const len = Math.hypot(ax + (bx - ax) * f, az + (bz - az) * f) || 1;
+    const tx = (ax + (bx - ax) * f) / len;
+    const tz = (az + (bz - az) * f) / len;
     return {
-      pos: new Vector3(a.x + dx * f + tz * lateral, 0, a.z + dz * f - tx * lateral),
+      pos: new Vector3(a.x + (b.x - a.x) * f + tz * lateral, 0, a.z + (b.z - a.z) * f - tx * lateral),
       heading: Math.atan2(tx, tz),
     };
   }
 
   /** Point at sample `i` shifted `lateral` along the smoothed (vertex) right vector. */
   private offsetSample(i: number, lateral: number, y: number): Vector3 {
-    const n = this.points.length;
-    const prev = this.points[(i - 1 + n) % n];
-    const next = this.points[(i + 1) % n];
     const p = this.points[i];
-    let tx = next.x - prev.x;
-    let tz = next.z - prev.z;
-    const len = Math.hypot(tx, tz) || 1;
-    tx /= len;
-    tz /= len;
+    const [tx, tz] = this.tangents[i];
     return new Vector3(p.x + tz * lateral, y, p.z - tx * lateral);
   }
 
@@ -116,6 +125,22 @@ export class Track {
   }
 
   private buildMeshes(scene: Scene): void {
+    // Asphalt: grey base with fine speckles.
+    const rand = mulberry32(7);
+    const asphalt = new DynamicTexture("asphaltTex", { width: 256, height: 256 }, scene, true);
+    const actx = asphalt.getContext();
+    actx.fillStyle = "rgb(70,72,76)";
+    actx.fillRect(0, 0, 256, 256);
+    for (let k = 0; k < 3000; k++) {
+      const g = Math.round(50 + rand() * 60);
+      actx.fillStyle = `rgb(${g},${g},${g + 3})`;
+      actx.fillRect(Math.floor(rand() * 256), Math.floor(rand() * 256), 1, 1);
+    }
+    asphalt.update();
+    // Ribbon UVs: u across the road (2 paths), v along it.
+    asphalt.uScale = 2;
+    asphalt.vScale = Math.round(this.length / 10);
+
     // Road surface.
     const road = MeshBuilder.CreateRibbon(
       "road",
@@ -125,12 +150,31 @@ export class Track {
       },
       scene,
     );
-    const roadMat = flatMaterial("roadMat", new Color3(0.35, 0.35, 0.38), scene);
+    const roadMat = flatMaterial("roadMat", Color3.White(), scene);
+    roadMat.diffuseTexture = asphalt;
+    roadMat.emissiveColor = new Color3(0.15, 0.15, 0.15);
     // Flat layers sit a few cm apart; polygon offset keeps them above the ground when seen from far away.
     roadMat.zOffset = -1;
     road.material = roadMat;
     road.isPickable = false;
+    road.receiveShadows = true;
     road.freezeWorldMatrix();
+
+    // White edge lines.
+    const lineMat = flatMaterial("edgeLineMat", Color3.White(), scene);
+    lineMat.emissiveColor = new Color3(0.5, 0.5, 0.5);
+    lineMat.zOffset = -2;
+    for (const s of [-1, 1]) {
+      const line = MeshBuilder.CreateRibbon(
+        `edgeLine${s}`,
+        { pathArray: [this.edgePath(s * EDGE_LINE[0], 0.025, true), this.edgePath(s * EDGE_LINE[1], 0.025, true)] },
+        scene,
+      );
+      line.material = lineMat;
+      line.isPickable = false;
+      line.receiveShadows = true;
+      line.freezeWorldMatrix();
+    }
 
     // Red/white curbs (explicitly closed paths so the vertex-color count is exact).
     const red = new Color4(0.9, 0.1, 0.1, 1);
@@ -155,29 +199,11 @@ export class Track {
       );
       curb.material = curbMat;
       curb.isPickable = false;
+      curb.receiveShadows = true;
       curb.freezeWorldMatrix();
     }
 
-    // Center dashes.
-    const dash = MeshBuilder.CreateBox("dash", { width: 0.3, height: 0.02, depth: 3 }, scene);
-    const dashMat = new StandardMaterial("dashMat", scene);
-    dashMat.diffuseColor = Color3.White();
-    dashMat.emissiveColor = new Color3(0.6, 0.6, 0.6);
-    dashMat.specularColor = Color3.Black();
-    dashMat.zOffset = -3;
-    dash.material = dashMat;
-    dash.isPickable = false;
-    const dashCount = Math.floor(this.length / DASH_SPACING);
-    for (let k = 0; k < dashCount; k++) {
-      const { pos, heading } = this.positionAt(k * DASH_SPACING + DASH_SPACING / 2, 0);
-      const inst = k === 0 ? dash : dash.createInstance(`dash${k}`);
-      inst.position.set(pos.x, 0.03, pos.z);
-      inst.rotation.y = heading;
-      inst.isPickable = false;
-      inst.freezeWorldMatrix();
-    }
-
-    // Start line + arch.
+    // Start line.
     const checkerMat = new StandardMaterial("checkerMat", scene);
     checkerMat.diffuseTexture = checkerTexture(scene, 8, 2);
     checkerMat.emissiveColor = new Color3(0.3, 0.3, 0.3);
@@ -190,50 +216,54 @@ export class Track {
     line.rotation.y = start.heading;
     line.isPickable = false;
     line.freezeWorldMatrix();
+  }
 
-    const poleMat = flatMaterial("poleMat", new Color3(0.9, 0.05, 0.1), scene);
-    for (const lateral of [-10, 10]) {
-      const p = this.positionAt(0, lateral).pos;
-      const pole = MeshBuilder.CreateCylinder(`archPole${lateral}`, { diameter: 0.8, height: 7 }, scene);
-      pole.material = poleMat;
-      pole.position.set(p.x, 3.5, p.z);
-      pole.isPickable = false;
-      pole.freezeWorldMatrix();
+  /**
+   * Circuit dressing from Kenney prefabs (grand stands, barriers, gantry…). Returns the ground
+   * positions of the bulky props so scenery can keep clear of them.
+   */
+  buildProps(prefabs: Record<PrefabKey, Prefab>): Vector3[] {
+    const L = this.length;
+    const centroid = this.points.reduce((acc, p) => acc.addInPlace(p), Vector3.Zero()).scaleInPlace(1 / this.points.length);
+    const outsideSign = (d: number): number =>
+      Vector3.DistanceSquared(this.positionAt(d, 10).pos, centroid) > Vector3.DistanceSquared(this.positionAt(d, -10).pos, centroid) ? 1 : -1;
+    const bulky: Vector3[] = [];
+    /** Stands a prop at `lateral` (signed) facing the road, uniformly scaled to `height` metres. */
+    const standFacing = (key: PrefabKey, d: number, lateral: number, height: number): void => {
+      const { pos, heading } = this.positionAt(d, lateral);
+      const yaw = heading - Math.sign(lateral) * (Math.PI / 2) + (FRONT_YAW[key] ?? 0);
+      place(prefabs[key], pos.x, pos.z, yaw, new Vector3(height, height, height));
+      bulky.push(pos);
+    };
+
+    for (let k = -3; k <= 2; k++) standFacing("grandStand", k * 10, outsideSign(k * 10) * 24, 9);
+    for (const d of [-25, 0, 25]) standFacing("tent", d, -outsideSign(d) * 20, 4);
+    for (let k = 0; k * 50 < L; k++) standFacing("lightPost", k * 50, (k % 2 === 0 ? 1 : -1) * 12.5, 9);
+    for (let k = 0; k < 8; k++) {
+      const d = (k * L) / 8 + L / 16;
+      standFacing("bannerTower", d, outsideSign(d) * 14, 8);
     }
-    const top = MeshBuilder.CreateBox("archTop", { width: 22, height: 1.5, depth: 1 }, scene);
-    top.material = checkerMat;
-    top.position.set(start.pos.x, 7.5, start.pos.z);
-    top.rotation.y = start.heading;
-    top.isPickable = false;
-    top.freezeWorldMatrix();
+    for (let k = 0; k < 4; k++) {
+      const d = (k * L) / 4 + L / 8;
+      standFacing("billboard", d, outsideSign(d) * 18, 5);
+    }
+    for (const s of [-1, 1]) standFacing("flagCheckers", 0, s * 10, 4);
 
-    // Floating rainbow cubes.
-    const cubes: { mesh: Mesh; mat: StandardMaterial; hue: number }[] = [];
-    for (let k = 0; k < 6; k++) {
-      for (const lateral of [-4, 0, 4]) {
-        const { pos } = this.positionAt((this.length * k) / 6 + 30, lateral);
-        const mesh = MeshBuilder.CreateBox(`itemCube${k}_${lateral}`, { size: 1.2 }, scene);
-        const mat = new StandardMaterial(`itemCubeMat${k}_${lateral}`, scene);
-        mat.diffuseColor = Color3.Black();
-        mat.specularColor = Color3.Black();
-        mat.disableLighting = true;
-        mat.alpha = 0.85;
-        mesh.material = mat;
-        mesh.position.set(pos.x, 1.5, pos.z);
-        mesh.isPickable = false;
-        cubes.push({ mesh, mat, hue: (k * 60 + (lateral + 4) * 15) % 360 });
+    // Barriers along both edges, length along the road.
+    const count = Math.floor(L / BARRIER_SPACING);
+    for (let k = 0; k < count; k++) {
+      const prefab = prefabs[k % 2 === 0 ? "barrierRed" : "barrierWhite"];
+      const scale = new Vector3(BARRIER_SPACING / prefab.size.x, 0.8, 0.5 / prefab.size.z);
+      for (const s of [-1, 1]) {
+        const { pos, heading } = this.positionAt(k * BARRIER_SPACING, s * 11);
+        place(prefab, pos.x, pos.z, heading + Math.PI / 2, scale);
       }
     }
-    let time = 0;
-    scene.onBeforeRenderObservable.add(() => {
-      const dt = scene.getEngine().getDeltaTime() / 1000;
-      time += dt;
-      for (const c of cubes) {
-        c.mesh.rotation.y += dt * 1.5;
-        c.mesh.rotation.x += dt * 0.9;
-        c.mesh.position.y = 1.5 + 0.25 * Math.sin(time * 2 + c.hue);
-        Color3.HSVtoRGBToRef((c.hue + time * 120) % 360, 0.9, 1, c.mat.emissiveColor);
-      }
-    });
+
+    // Start gantry spanning the road (its long axis is x, so yaw = heading puts x across the road).
+    const gantry = prefabs.gantry;
+    const start = this.positionAt(0, 0);
+    place(gantry, start.pos.x, start.pos.z, start.heading, new Vector3(24 / gantry.size.x, 7.5, 1.2 / gantry.size.z));
+    return bulky;
   }
 }

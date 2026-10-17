@@ -1,12 +1,11 @@
 import type { Question } from "./questions";
-import { CREEP_CAP, MAX_ERRORS } from "./config";
+import { CREEP_CAP, LIVES } from "./config";
 
 export type RaceStatus = "countdown" | "running" | "finished" | "crashed";
 export type SubmitResult = "ignored" | "correct" | "wrong" | "finished" | "crashed";
 
 export interface RivalSpec {
   name: string;
-  color: readonly number[];
   paceFactor: number;
 }
 
@@ -65,7 +64,7 @@ export class RaceSession {
       return "correct";
     }
     this.errors++;
-    if (this.errors > MAX_ERRORS) {
+    if (this.errors >= LIVES) {
       this.crashProgress = this.playerProgress(nowMs);
       this.status = "crashed";
       this.endElapsed = elapsed;

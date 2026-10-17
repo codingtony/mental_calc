@@ -61,9 +61,15 @@ const STRINGS: Record<string, Entry> = {
     fr: "Presque ! Essaie de finir dans le top 3.",
   },
   resultCrashed: {
-    sv: "För många fel – bilen kraschade!",
-    en: "Too many mistakes — your kart crashed!",
-    fr: "Trop d'erreurs, ton kart s'est écrasé !",
+    sv: "För många fel – motorcykeln kraschade!",
+    en: "Too many mistakes — your bike crashed!",
+    fr: "Trop d'erreurs, ta moto s'est écrasée !",
+  },
+  loading: { sv: "Laddar…", en: "Loading…", fr: "Chargement…" },
+  loadFailed: {
+    sv: "Kunde inte ladda spelet. Ladda om sidan.",
+    en: "Could not load the game. Please reload the page.",
+    fr: "Impossible de charger le jeu. Recharge la page.",
   },
   statPosition: { sv: "Placering", en: "Position", fr: "Position" },
   statTime: { sv: "Tid", en: "Time", fr: "Temps" },

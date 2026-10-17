@@ -32,6 +32,26 @@ body {
   outline: none;
 }
 
+.boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: clamp(22px, 4vw, 40px);
+  font-style: italic;
+  color: #fff;
+  -webkit-text-stroke: 1px #000;
+  text-shadow: 2px 2px 0 #000;
+  pointer-events: none;
+}
+
+.credits {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 12px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -758,11 +778,6 @@ button {
   color: #fff;
 }
 
-.board-wrap {
-  max-height: 34vh;
-  overflow: auto;
-}
-
 #board {
   width: 100%;
   border-collapse: collapse;
@@ -842,12 +857,17 @@ button {
   font-size: 16px;
 }
 
-/* The host panel never scrolls as a whole: header, settings and buttons keep
-   their size and the player list (lobby) or lanes (race) take the remaining
-   height and scroll on their own, so Start/End stay on screen with 60 players. */
-.panel.host {
+/* The host and results panels never scroll as a whole: header, settings and
+   buttons keep their size and the player list (lobby), lanes (race) or score
+   board take the remaining height and scroll on their own, so Start/End and
+   Race again stay on screen with 60 players or a tall title. */
+.panel.host,
+.panel.results {
   display: flex;
   flex-direction: column;
+}
+
+.panel.host {
   width: min(1100px, 100%);
 }
 
@@ -860,14 +880,16 @@ button {
 }
 
 #host-lobby > *,
-#host-board > * {
+#host-board > *,
+.panel.results > * {
   flex-shrink: 0;
 }
 
 /* The box takes the flexible height; the list inside it scrolls and the
    ▲/▼ pills overlay its top/bottom edges without taking layout space. */
 #host-lobby > .scroll-box,
-#host-board > .scroll-box {
+#host-board > .scroll-box,
+.panel.results > .scroll-box {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -884,7 +906,8 @@ button {
 }
 
 #host-players,
-#lanes {
+#lanes,
+.board-wrap {
   flex: 1 1 auto;
   min-height: 0;
   margin: 0;
@@ -906,18 +929,21 @@ button {
   align-content: flex-start;
 }
 
-#lanes {
+#lanes,
+.board-wrap {
   padding: 4px 8px;
 }
 
 /* Always-visible scrollbar (macOS hides overlay scrollbars until you scroll). */
 #host-players::-webkit-scrollbar,
-#lanes::-webkit-scrollbar {
+#lanes::-webkit-scrollbar,
+.board-wrap::-webkit-scrollbar {
   width: 12px;
 }
 
 #host-players::-webkit-scrollbar-thumb,
-#lanes::-webkit-scrollbar-thumb {
+#lanes::-webkit-scrollbar-thumb,
+.board-wrap::-webkit-scrollbar-thumb {
   background: #000;
   border: 3px solid #fff;
   border-radius: 6px;
@@ -926,7 +952,8 @@ button {
 /* On a phone the header alone overflows and the panel scrolls: keep the
    buttons pinned to the panel's bottom edge (no effect when nothing scrolls). */
 #host-lobby > .choices,
-#host-board > .choices {
+#host-board > .choices,
+.panel.results > .choices {
   position: sticky;
   bottom: -24px;
   z-index: 2;
@@ -1065,7 +1092,7 @@ button {
   height: 18px;
 }
 
-#lanes:has(> li:nth-child(13)) .kart {
+#lanes:has(> li:nth-child(13)) .moto {
   top: 0;
   height: 14px;
 }
@@ -1099,7 +1126,7 @@ button {
   border-radius: 6px;
 }
 
-.lane .kart {
+.lane .moto {
   position: absolute;
   top: 1px;
   width: 24px;

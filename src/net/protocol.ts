@@ -1,6 +1,7 @@
 // Message types of the relay protocol v1. Mirrors relay/PROTOCOL.md (the single source):
 // change both together. Every message is a JSON object with a `t` field.
 import type { Category, CupId, Difficulty } from "../config";
+import type { RiderLook } from "../look";
 
 export interface RoomSettings {
   cup: CupId;
@@ -19,6 +20,8 @@ export interface TopRow {
   status: PlayerStatus;
   /** Finish / crash / last-answer time (ms from the player's local start) used for ranking. */
   ms: number;
+  /** Rider appearance, when the player sent one (else the client picks a default). */
+  look?: RiderLook;
 }
 
 export interface RankInfo {
@@ -70,7 +73,8 @@ export type HostToRelay =
 
 export type RelayToHost =
   | { t: "created"; code: string; hostToken: string; phase?: RoomPhase }
-  | { t: "player_joined"; playerId: string; name: string; reconnect?: boolean }
+  /** `look` is the player's opaque join `look`, forwarded unvalidated: parse before use. */
+  | { t: "player_joined"; playerId: string; name: string; reconnect?: boolean; look?: unknown }
   | { t: "player_left"; playerId: string; reason?: "disconnected" | "kicked" }
   | { t: "progress"; playerId: string; done: number; status: ReportedStatus; elapsedMs: number }
   | { t: "error"; reason: ErrorReason }
@@ -79,7 +83,7 @@ export type RelayToHost =
 // ---------- Player → relay ----------
 
 export type PlayerToRelay =
-  | { t: "join"; code: string; name: string; playerToken?: string }
+  | { t: "join"; code: string; name: string; playerToken?: string; look?: RiderLook }
   | { t: "progress"; done: number; status: ReportedStatus; elapsedMs: number }
   | Ping;
 
