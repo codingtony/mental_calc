@@ -116,3 +116,7 @@ Configuration (env, flags override): `LISTEN` (`127.0.0.1:8010`), `ALLOWED_ORIGI
 
 Tests: `go test ./...`. Smoke against a running relay:
 `RELAY_URL=ws://127.0.0.1:8010/ws go test -run TestSmoke30Players -v .`
+
+Scenario simulator (about 100 replayable race scenarios against any relay URL, production
+included): `go run ./cmd/relaysim -url ws://127.0.0.1:8010/ws -n 100`. Replay one scenario with
+`-seed S -only name#i`. Flags and scenarios: `cmd/relaysim/README.md`.

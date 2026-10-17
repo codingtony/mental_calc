@@ -26,6 +26,10 @@ jobs:
         cd relay && go test ./... && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o mc-relay-linux-amd64 .
         sha256sum mc-relay-linux-amd64 | cut -d' ' -f1 > mc-relay-linux-amd64.sha256
 
+    - name: Scenario simulation (100 races against the release binary)
+      working-directory: relay
+      run: scripts/ci-sim.sh ./mc-relay-linux-amd64
+
     - name: Create GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}
