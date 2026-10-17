@@ -43,6 +43,7 @@ export type ErrorReason =
   | "full"
   | "started"
   | "bad_name"
+  | "name_taken"
   | "bad_token"
   | "rate_limited"
   | "bad_request"

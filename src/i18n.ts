@@ -9,6 +9,7 @@ const STRINGS: Record<string, Entry> = {
   nameLabel: { sv: "Ditt namn", en: "Your name", fr: "Ton nom" },
   namePlaceholder: { sv: "Förarnamn", en: "Driver name", fr: "Nom du pilote" },
   nameRequired: { sv: "Skriv ditt namn för att tävla", en: "Enter your name to race", fr: "Entre ton nom pour courir" },
+  cupLabel: { sv: "Cup", en: "Cup", fr: "Coupe" },
   categoryLabel: { sv: "Antal frågor", en: "Number of questions", fr: "Nombre de questions" },
   questionsN: { sv: "{n} frågor", en: "{n} questions", fr: "{n} questions" },
   questionsWord: { sv: "frågor", en: "questions", fr: "questions" },
@@ -22,6 +23,7 @@ const STRINGS: Record<string, Entry> = {
   on: { sv: "På", en: "On", fr: "Activé" },
   off: { sv: "Av", en: "Off", fr: "Désactivé" },
   next: { sv: "Nästa", en: "Next", fr: "Suivant" },
+  solo: { sv: "Kör solo", en: "Solo race", fr: "Course en solo" },
   chooseCup: { sv: "Välj cup", en: "Choose your cup", fr: "Choisis ta coupe" },
   back: { sv: "Tillbaka", en: "Back", fr: "Retour" },
   "cup.add": { sv: "Pluscupen", en: "Plus Cup", fr: "Coupe Plus" },
@@ -116,6 +118,11 @@ const STRINGS: Record<string, Entry> = {
   "mpErr.full": { sv: "Loppet är fullt", en: "The race is full", fr: "La course est complète" },
   "mpErr.started": { sv: "Loppet har redan startat", en: "The race has already started", fr: "La course a déjà commencé" },
   "mpErr.bad_name": { sv: "Ogiltigt namn", en: "Invalid name", fr: "Nom invalide" },
+  "mpErr.name_taken": {
+    sv: "Någon har redan det namnet: lägg till din initial, t.ex. Ebba S",
+    en: "Someone already has this name: add your initial, e.g. Ebba S",
+    fr: "Quelqu'un a déjà ce nom : ajoute ton initiale, par ex. Ebba S",
+  },
   "mpErr.closed": { sv: "Loppet är stängt", en: "The race was closed", fr: "La course est fermée" },
   "mpErr.replaced": {
     sv: "Loppet öppnades i en annan flik",

@@ -31,6 +31,7 @@ import {
   renderHostSettings,
   renderIntroTitle,
   renderLanes,
+  renderMenu,
   renderMpStandings,
   renderNames,
   renderPodium,
@@ -52,7 +53,7 @@ declare global {
   }
 }
 
-type Screen = "intro" | "setup" | "cups" | "race" | "results" | "join" | "wait" | "host";
+type Screen = "intro" | "menu" | "setup" | "cups" | "race" | "results" | "join" | "wait" | "host";
 
 const INTRO_MS = 4500;
 const COUNTDOWN_STEP_MS = 1000;
@@ -128,13 +129,27 @@ function showIntro(): void {
   renderIntroTitle();
   showOnly("screen-intro");
   world.setMode("intro", performance.now());
-  later(INTRO_MS, showSetup);
+  later(INTRO_MS, showMenu);
   const skip = () => {
-    if (screen === "intro") showSetup();
+    if (screen === "intro") showMenu();
   };
   document.addEventListener("pointerdown", skip, { once: true });
   document.addEventListener("keydown", skip, { once: true });
 }
+
+// ---------- Menu ----------
+
+function showMenu(): void {
+  clearTimers();
+  screen = "menu";
+  showOnly("screen-menu");
+  world.setMode("menu", performance.now());
+  el("menu-error").textContent = "";
+  renderMenu(prefs);
+  el("mp-offline").classList.add("hidden");
+}
+
+el("solo-btn").addEventListener("click", showSetup);
 
 // ---------- Setup ----------
 
@@ -146,16 +161,16 @@ function showSetup(): void {
   nameEl.value = prefs.name;
   el("name-error").textContent = "";
   renderSetup(prefs);
-  el("mp-offline").classList.add("hidden");
 }
+
+el("setup-back").addEventListener("click", showMenu);
 
 document.querySelectorAll<HTMLButtonElement>(".flag").forEach((b) =>
   b.addEventListener("click", () => {
     prefs.lang = b.dataset.lang as Lang;
     savePrefs(prefs);
     setLang(prefs.lang);
-    renderSetup(prefs);
-    if (el("name-error").textContent) el("name-error").textContent = t("nameRequired");
+    renderMenu(prefs);
   }),
 );
 
@@ -629,7 +644,7 @@ document.querySelectorAll<HTMLButtonElement>(".tab").forEach((b) =>
 );
 el("again-btn").addEventListener("click", () => startRace(cup));
 el("cups-btn").addEventListener("click", showCups);
-el("menu-btn").addEventListener("click", showSetup);
+el("menu-btn").addEventListener("click", showMenu);
 el("mp-leave-btn").addEventListener("click", leavePlayerRoom);
 
 // ---------- Multiplayer: join (kid) ----------
@@ -737,12 +752,12 @@ function leavePlayerRoom(): void {
   player?.leave();
   player = null;
   abortRace();
-  showSetup();
+  showMenu();
 }
 
 el("join-btn").addEventListener("click", () => showJoin(""));
 el("join-go").addEventListener("click", submitJoin);
-el("join-back").addEventListener("click", showSetup);
+el("join-back").addEventListener("click", showMenu);
 el("wait-leave").addEventListener("click", leavePlayerRoom);
 joinCodeEl.addEventListener("input", () => {
   joinCodeEl.value = joinCodeEl.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -765,7 +780,7 @@ const hostListener: HostListener = {
       return;
     }
     closeHostRoom();
-    el("name-error").textContent = mpErrorText(reason);
+    el("menu-error").textContent = mpErrorText(reason);
   },
   onConnection: offline,
 };
@@ -790,7 +805,7 @@ function closeHostRoom(): void {
   host?.close();
   host = null;
   hostQrCode = "";
-  showSetup();
+  showMenu();
 }
 
 function renderHost(): void {
@@ -933,7 +948,7 @@ if (import.meta.env.DEV) {
 }
 
 setLang(prefs.lang);
-// The QR-code and reload paths skip the setup screen, which normally fills the HUD audio buttons.
+// The QR-code and reload paths skip the menu, which normally fills the HUD audio buttons.
 renderAudioToggles(prefs);
 // A reload resumes this tab's room (host or player); `?room=CODE` (QR code) opens the join screen.
 const roomParam = new URLSearchParams(location.search).get("room")?.trim().toUpperCase() || null;

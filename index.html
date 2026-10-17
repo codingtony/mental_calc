@@ -14,7 +14,7 @@
       <p class="skip" data-i18n="skip"></p>
     </section>
 
-    <section id="screen-setup" class="screen hidden">
+    <section id="screen-menu" class="screen hidden">
       <div class="panel">
         <div class="flags">
           <button class="flag" data-lang="sv" aria-label="Svenska">
@@ -28,6 +28,24 @@
           </button>
         </div>
         <h1 class="title small">Mental Calc GP</h1>
+
+        <div class="menu-options">
+          <button id="solo-btn" class="big-btn" data-i18n="solo"></button>
+          <button id="host-btn" class="big-btn" data-i18n="mpHost"></button>
+          <button id="join-btn" class="big-btn" data-i18n="mpJoin"></button>
+        </div>
+        <p id="menu-error" class="error"></p>
+
+        <div class="choices toggles">
+          <button class="choice" id="toggle-music">🎵 <span data-i18n="music"></span>: <b></b></button>
+          <button class="choice" id="toggle-sound">🔊 <span data-i18n="sound"></span>: <b></b></button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-setup" class="screen hidden">
+      <div class="panel">
+        <h2 class="heading" data-i18n="solo"></h2>
 
         <label class="field-label" for="name" data-i18n="nameLabel"></label>
         <input id="name" maxlength="16" autocomplete="off" data-i18n-placeholder="namePlaceholder" />
@@ -48,16 +66,8 @@
           <button class="choice" data-difficulty="hard"><span data-i18n="hard"></span><small></small></button>
         </div>
 
-        <div class="choices toggles">
-          <button class="choice" id="toggle-music">🎵 <span data-i18n="music"></span>: <b></b></button>
-          <button class="choice" id="toggle-sound">🔊 <span data-i18n="sound"></span>: <b></b></button>
-        </div>
-
         <button id="next-btn" class="big-btn" data-i18n="next"></button>
-        <div class="choices">
-          <button id="host-btn" class="secondary-btn" data-i18n="mpHost"></button>
-          <button id="join-btn" class="secondary-btn" data-i18n="mpJoin"></button>
-        </div>
+        <button id="setup-back" class="secondary-btn" data-i18n="back"></button>
       </div>
     </section>
 
@@ -110,23 +120,28 @@
             <img id="host-qr" alt="" width="220" height="220" />
           </div>
           <p class="field-label" data-i18n="mpRace"></p>
-          <div class="choices">
-            <button class="choice" data-host-cup="add"></button>
-            <button class="choice" data-host-cup="addsub"></button>
-            <button class="choice" data-host-cup="mul"></button>
-            <button class="choice" data-host-cup="muldiv"></button>
-            <button class="choice" data-host-cup="all"></button>
-          </div>
-          <div class="choices">
-            <button class="choice" data-host-n="10"><span>10</span><small data-i18n="questionsWord"></small></button>
-            <button class="choice" data-host-n="30"><span>30</span><small data-i18n="questionsWord"></small></button>
-            <button class="choice" data-host-n="50"><span>50</span><small data-i18n="questionsWord"></small></button>
-            <button class="choice" data-host-n="120"><span>120</span><small data-i18n="questionsWord"></small></button>
-          </div>
-          <div class="choices">
-            <button class="choice" data-host-difficulty="easy"><span data-i18n="easy"></span><small></small></button>
-            <button class="choice" data-host-difficulty="medium"><span data-i18n="medium"></span><small></small></button>
-            <button class="choice" data-host-difficulty="hard"><span data-i18n="hard"></span><small></small></button>
+          <div class="host-settings">
+            <span class="field-label" data-i18n="cupLabel"></span>
+            <div class="choices compact">
+              <button class="choice" data-host-cup="add"></button>
+              <button class="choice" data-host-cup="addsub"></button>
+              <button class="choice" data-host-cup="mul"></button>
+              <button class="choice" data-host-cup="muldiv"></button>
+              <button class="choice" data-host-cup="all"></button>
+            </div>
+            <span class="field-label" data-i18n="categoryLabel"></span>
+            <div class="choices compact">
+              <button class="choice" data-host-n="10">10</button>
+              <button class="choice" data-host-n="30">30</button>
+              <button class="choice" data-host-n="50">50</button>
+              <button class="choice" data-host-n="120">120</button>
+            </div>
+            <span class="field-label" data-i18n="difficultyLabel"></span>
+            <div class="choices compact">
+              <button class="choice" data-host-difficulty="easy"><span data-i18n="easy"></span><small></small></button>
+              <button class="choice" data-host-difficulty="medium"><span data-i18n="medium"></span><small></small></button>
+              <button class="choice" data-host-difficulty="hard"><span data-i18n="hard"></span><small></small></button>
+            </div>
           </div>
           <p id="host-count" class="field-label"></p>
           <ul id="host-players" class="names"></ul>

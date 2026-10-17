@@ -9,6 +9,7 @@ export function el<T extends HTMLElement = HTMLElement>(id: string): T {
 
 const OVERLAYS = [
   "screen-intro",
+  "screen-menu",
   "screen-setup",
   "screen-cups",
   "screen-join",
@@ -48,10 +49,14 @@ export function formatQuestion(text: string): string {
   return text.replace(" x ", " × ").replace(" / ", " ÷ ").replace(" - ", " − ") + " = ?";
 }
 
-export function renderSetup(prefs: Prefs): void {
+export function renderMenu(prefs: Prefs): void {
   document.querySelectorAll<HTMLButtonElement>(".flag").forEach((b) => {
     b.classList.toggle("active", b.dataset.lang === getLang());
   });
+  renderAudioToggles(prefs);
+}
+
+export function renderSetup(prefs: Prefs): void {
   document.querySelectorAll<HTMLButtonElement>("[data-category]").forEach((b) => {
     b.classList.toggle("selected", Number(b.dataset.category) === prefs.category);
   });
@@ -60,7 +65,6 @@ export function renderSetup(prefs: Prefs): void {
     b.querySelector("small")!.textContent = t("secondsPerQuestion", { s: DIFFICULTIES[d] });
     b.classList.toggle("selected", d === prefs.difficulty);
   });
-  renderAudioToggles(prefs);
 }
 
 export function renderAudioToggles(prefs: Prefs): void {

@@ -321,6 +321,17 @@ button {
   width: auto;
 }
 
+.menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.menu-options .big-btn {
+  margin-top: 0;
+}
+
 /* ---------- Cups ---------- */
 
 .cups {
@@ -835,6 +846,44 @@ button {
   width: min(1100px, 100%);
 }
 
+.host-settings {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 6px;
+}
+
+.host-settings .field-label {
+  margin: 0;
+}
+
+.choices.compact {
+  gap: 6px;
+}
+
+.choices.compact .choice {
+  flex: 0 0 auto;
+  min-width: 0;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 14px;
+  border-width: 2px;
+  border-radius: 9px;
+  box-shadow: 0 3px 0 #000;
+}
+
+.choices.compact .choice:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #000;
+}
+
+.choices.compact .choice small {
+  font-size: 11px;
+}
+
 .host-join {
   display: flex;
   flex-wrap: wrap;
@@ -1056,6 +1105,10 @@ button {
 @media (max-width: 600px) {
   #standings {
     display: none;
+  }
+  .host-settings {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
   /* Multiplayer keeps the top 5 visible on phones, above the position. */
   #hud.mp #standings {
