@@ -115,6 +115,32 @@ func TestJoinRejectedAfterStart(t *testing.T) {
 	}
 }
 
+func TestNameTaken(t *testing.T) {
+	r := startRelay(t, testConfig())
+	host, created := createRoom(t, r.url)
+	code := created.str("code")
+	ebba, _ := joinRoom(t, r.url, code, "Ebba")
+	host.expect("player_joined")
+
+	// Same name, other case and spacing: refused, the socket can retry.
+	dup := dial(t, r.url)
+	dup.send(map[string]any{"t": "join", "code": code, "name": "  EBBA "})
+	if e := dup.expect("error"); e.str("reason") != "name_taken" {
+		t.Fatalf("want name_taken, got %s", e.raw)
+	}
+	dup.send(map[string]any{"t": "join", "code": code, "name": "Ebba S"})
+	dup.expect("joined")
+	host.expect("player_joined")
+
+	// Once the first Ebba is gone, the name is free again.
+	ebba.close()
+	ebba.expectClosed()
+	host.expect("player_left")
+	again := dial(t, r.url)
+	again.send(map[string]any{"t": "join", "code": code, "name": "ebba"})
+	again.expect("joined")
+}
+
 func TestCapacity(t *testing.T) {
 	cfg := testConfig()
 	cfg.MaxPlayers = 2

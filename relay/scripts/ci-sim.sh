@@ -19,7 +19,7 @@ done
 curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null
 
 # No nginx in front locally, so handshakes need no production pacing.
-if ! go run ./cmd/relaysim -url "ws://127.0.0.1:$port/ws" -n 100 -connect-rate 50 "$@"; then
+if ! go run ./cmd/relaysim -url "ws://127.0.0.1:$port/ws" -concurrency 20 -connect-rate 200 "$@"; then
   echo "--- relay log (last 100 lines) ---"
   tail -n 100 "$log"
   exit 1

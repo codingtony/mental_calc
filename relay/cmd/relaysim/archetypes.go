@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"math/rand/v2"
 	"slices"
 	"strings"
 	"time"
@@ -11,51 +10,136 @@ import (
 )
 
 type archetype struct {
-	name   string
-	weight int
-	slow   bool          // only with -slow
-	extra  time.Duration // added to -timeout
-	run    func(sc *scenario)
+	name  string
+	count int           // runs per suite pass
+	slow  bool          // only with -slow
+	extra time.Duration // added to -timeout
+	run   func(sc *scenario)
 }
 
+// Longest first, so they overlap the short ones.
 var archetypes = []archetype{
-	{name: "race", weight: 22, run: scRace},
-	{name: "rematch", weight: 8, run: scRematch},
-	{name: "rematch_midrace", weight: 5, run: scRematchMidrace},
-	{name: "kick_lobby", weight: 6, run: scKickLobby},
-	{name: "kick_race", weight: 7, run: scKickRace},
-	{name: "reconnect", weight: 8, run: scReconnect},
-	{name: "dup_conn", weight: 6, run: scDupConn},
-	{name: "reconnect_after_end", weight: 5, run: scReconnectAfterEnd},
-	{name: "host_resume_race", weight: 7, run: scHostResumeRace},
-	{name: "host_resume_lobby", weight: 4, run: scHostResumeLobby},
-	{name: "host_takeover", weight: 5, run: scHostTakeover},
-	{name: "late_join", weight: 6, run: scLateJoin},
-	{name: "bad_input", weight: 6, run: scBadInput},
-	{name: "capacity", weight: 3, run: scCapacity},
-	{name: "rooms", weight: 4, run: scRooms},
-	{name: "host_gone", weight: 3, slow: true, extra: 3 * time.Minute, run: scHostGone},
+	{name: "host_gone", count: 1, slow: true, extra: 3 * time.Minute, run: scHostGone},
+	{name: "class60_chaos", count: 2, run: scClass60Chaos},
+	{name: "class60", count: 2, run: scClass60},
+	{name: "race", count: 10, run: scRace},
+	{name: "rematch", count: 4, run: scRematch},
+	{name: "rematch_midrace", count: 3, run: scRematchMidrace},
+	{name: "host_resume_race", count: 4, run: scHostResumeRace},
+	{name: "reconnect", count: 4, run: scReconnect},
+	{name: "dup_conn", count: 3, run: scDupConn},
+	{name: "host_takeover", count: 3, run: scHostTakeover},
+	{name: "late_join", count: 3, run: scLateJoin},
+	{name: "kick_race", count: 3, run: scKickRace},
+	{name: "kick_lobby", count: 3, run: scKickLobby},
+	{name: "reconnect_after_end", count: 3, run: scReconnectAfterEnd},
+	{name: "host_resume_lobby", count: 3, run: scHostResumeLobby},
+	{name: "bad_input", count: 4, run: scBadInput},
+	{name: "capacity", count: 2, run: scCapacity},
+	{name: "rooms", count: 4, run: scRooms},
 }
 
-func pickArchetype(rng *rand.Rand, slow bool) *archetype {
-	total := 0
-	for _, a := range archetypes {
-		if !a.slow || slow {
-			total += a.weight
-		}
-	}
-	x := rng.IntN(total)
+// suite is one pass over every archetype, count times each, in list order.
+func suite(slow bool) []*archetype {
+	var out []*archetype
 	for i := range archetypes {
 		a := &archetypes[i]
 		if a.slow && !slow {
 			continue
 		}
-		if x < a.weight {
-			return a
+		for range a.count {
+			out = append(out, a)
 		}
-		x -= a.weight
 	}
-	panic("unreachable")
+	return out
+}
+
+const classSize = 60
+
+// class60: a full classroom of 60; a second "Ebba" is refused (name_taken,
+// case-insensitive, padded) and gets in as "Ebba S" on the same socket.
+func scClass60(sc *scenario) {
+	s := sc.genSettings([]int{30, 50})
+	rm := sc.newRoom("")
+	first := rm.newPlayerNamed("Ebba")
+	mid := rm.newPlayers(classSize - 2)
+	dup := rm.newPlayerNamed("Ebba S")
+	all := slices.Concat([]*simPlayer{first}, mid, []*simPlayer{dup})
+	pl := sc.planRace(all, s)
+	sc.describe("players=%d n=%d", len(all), s.N)
+
+	rm.create(s)
+	rm.joinAll(all[:classSize-1])
+	rm.connect(dup)
+	got := rm.join(dup, rm.code(), "  eBBA ", "")
+	sc.check(got == "name_taken", "join duplicate name: %q, want name_taken", got)
+	rm.tr("join duplicate name: %s", got)
+	rm.mustJoin(dup, "")
+	rm.checkHostJoins([]*simPlayer{dup})
+	rm.checkLobby(all)
+	r := rm.startRace(all, pl)
+	rm.finishRace(r, all, finishOpts{exact: true})
+}
+
+// class60_chaos: 60 racers; 3 drop mid-race, the host tab drops and resumes
+// (replaying 60 players, 3 offline), the 3 come back, one racer is kicked,
+// one opens a second tab; then a rematch and a clean second race.
+func scClass60Chaos(sc *scenario) {
+	s1, s2 := sc.genSettings([]int{30}), sc.genSettings(tenN)
+	rm := sc.newRoom("")
+	ps := rm.newPlayers(classSize)
+	perm := sc.rng.Perm(classSize)
+	drops := []*simPlayer{ps[perm[0]], ps[perm[1]], ps[perm[2]]}
+	k, d := ps[perm[3]], ps[perm[4]]
+	pl1 := sc.planRace(ps, s1, append(slices.Clone(drops), k, d)...)
+	rest := without(ps, k)
+	seed := sc.rng.Uint32()
+	pl2 := sc.planRace(rest, s2)
+	sc.describe("players=%d n=%d,%d drops=%s,%s,%s kick=%s dup=%s", classSize, s1.N, s2.N,
+		drops[0].label, drops[1].label, drops[2].label, k.label, d.label)
+
+	rm.create(s1)
+	rm.joinAll(ps)
+	r1 := rm.startRace(ps, pl1)
+	for _, t := range drops {
+		rm.stallAndDrop(t, pl1.gates[t])
+	}
+	// k and d are stalled at their gates before the host leaves, so the
+	// resumed host's log already holds every step they sent.
+	rm.waitHostLog(k, pl1.gates[k])
+	rm.waitHostLog(d, pl1.gates[d])
+
+	rm.host.drop()
+	sc.sleep(300 * time.Millisecond)
+	rm.resumeHost(false, ps, phaseRacing)
+
+	for _, t := range drops {
+		oldID, token := t.ID()
+		rm.connect(t)
+		rm.mustJoin(t, token)
+		rm.checkRejoined(t, oldID, phaseRacing, r1)
+		t.releaseGate()
+	}
+
+	rm.waitHostLog(k, pl1.gates[k])
+	rm.kick(k)
+
+	oldID, token := d.ID()
+	var oldConn *wsConn
+	d.with(func() { oldConn = d.c })
+	oldConn.expectClose(4001)
+	rm.connect(d)
+	rm.mustJoin(d, token)
+	code := oldConn.awaitClosed(stepWait)
+	sc.check(code == 4001, "%s: replaced socket closed with %d, want 4001", d.label, code)
+	rm.checkRejoined(d, oldID, phaseRacing, r1)
+	d.releaseGate()
+	rm.tr("%s second tab: close 4001", d.label)
+
+	rm.finishRace(r1, rest, finishOpts{})
+	rm.rematch(rest, seed)
+	r2 := rm.startRace(rest, pl2)
+	rm.finishRace(r2, rest, finishOpts{exact: true})
 }
 
 // race: 1-30 players race to the end; every progress reaches the host, every
@@ -436,6 +520,11 @@ func scBadInput(sc *scenario) {
 	rm.mustJoin(y, "")
 	rm.checkHostJoins([]*simPlayer{x, y})
 	rm.checkLobby(all)
+	w := rm.newPlayerNamed("ALICE")
+	rm.connect(w)
+	got = rm.join(w, code, w.name, "")
+	sc.check(got == "name_taken", "join duplicate name: %q, want name_taken", got)
+	rm.tr("join duplicate name: %s", got)
 
 	// Wrong role / unknown messages from a player.
 	x.c.send(map[string]any{"t": "start", "seed": 1})
@@ -480,7 +569,7 @@ func scBadInput(sc *scenario) {
 	o := rm.newPlayerNamed("big")
 	rm.connect(o)
 	o.c.expectClose(websocket.StatusMessageTooBig)
-	o.c.sendRaw([]byte(`{"t":"ping","pad":"`+strings.Repeat("x", 5000)+`"}`), false)
+	o.c.sendRaw([]byte(`{"t":"ping","pad":"`+strings.Repeat("x", 9000)+`"}`), false)
 	cc := o.c.awaitClosed(stepWait)
 	sc.check(cc == websocket.StatusMessageTooBig, "oversized message: close %d, want 1009", cc)
 	rm.tr("oversized message: close 1009")

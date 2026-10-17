@@ -33,12 +33,24 @@ func TestRankPlayers(t *testing.T) {
 }
 
 func TestScenarioIsReplayable(t *testing.T) {
-	for i := range 50 {
-		a := pickArchetype(scenarioRNG(42, i), false)
-		b := pickArchetype(scenarioRNG(42, i), false)
-		if a != b || a.slow {
-			t.Fatalf("scenario %d: %s vs %s", i, a.name, b.name)
+	s := suite(false)
+	if len(s) != 60 {
+		t.Fatalf("suite has %d scenarios, want 60", len(s))
+	}
+	seen := map[string]bool{}
+	for _, a := range s {
+		if a.slow {
+			t.Fatalf("slow archetype %s in the default suite", a.name)
 		}
+		seen[a.name] = true
+	}
+	for _, a := range archetypes {
+		if !a.slow && !seen[a.name] {
+			t.Errorf("archetype %s missing from the suite", a.name)
+		}
+	}
+	if got := suite(true)[0].name; got != "host_gone" {
+		t.Errorf("suite(true)[0] = %s, want host_gone", got)
 	}
 	sc := &scenario{rng: scenarioRNG(7, 3)}
 	s1 := sc.genScript(30, 3)

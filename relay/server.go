@@ -56,7 +56,10 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(maxMessageBytes)
-	c := newClient(ws, ip, ua)
+	// A host resume (handleResume) queues `created` plus up to player_joined +
+	// player_left + progress per player at once (181 messages at 60 players);
+	// the +64 covers live traffic and lobby broadcast bursts.
+	c := newClient(ws, ip, ua, 3*s.cfg.MaxPlayers+64)
 	s.log.Info("ws_connect", c.logAttrs()...)
 	go c.writeLoop(s.cfg.PingInterval)
 	s.readLoop(c)

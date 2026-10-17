@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -498,6 +499,9 @@ func (r *Room) handleJoin(req joinReq) string {
 	if len(r.byConn) >= r.cfg.MaxPlayers {
 		return "full"
 	}
+	if r.nameTaken(req.name) {
+		return "name_taken"
+	}
 	r.pruneRecords()
 	p := &player{id: r.newPlayerID(), token: randomHex(16), name: req.name, conn: c}
 	r.players[p.id] = p
@@ -507,6 +511,18 @@ func (r *Room) handleJoin(req joinReq) string {
 	r.totalJoins++
 	r.afterJoin(p, false)
 	return ""
+}
+
+// nameTaken reports whether a connected player already uses this name
+// (case-insensitive). Disconnected players don't count, so a kid who closed
+// the tab can rejoin under the same name.
+func (r *Room) nameTaken(name string) bool {
+	for _, p := range r.byConn {
+		if strings.EqualFold(p.name, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Room) afterJoin(p *player, reconnect bool) {

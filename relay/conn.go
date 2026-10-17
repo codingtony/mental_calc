@@ -34,9 +34,9 @@ type client struct {
 	ip, ua  string
 }
 
-func newClient(ws *websocket.Conn, ip, ua string) *client {
+func newClient(ws *websocket.Conn, ip, ua string, queue int) *client {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &client{ws: ws, out: make(chan outMsg, sendQueue), ctx: ctx, cancel: cancel, ip: ip, ua: ua}
+	return &client{ws: ws, out: make(chan outMsg, queue), ctx: ctx, cancel: cancel, ip: ip, ua: ua}
 }
 
 // send queues one message. A client that lets its queue fill up is dropped.

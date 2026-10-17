@@ -10,15 +10,15 @@ import (
 	"time"
 )
 
-// TestSmoke30Players runs 1 host and 30 players through a full race and
+// TestSmoke60Players runs 1 host and 60 players through a full race and
 // checks that every player receives only its own `me`. It uses an in-process
 // relay, or the relay at RELAY_URL (e.g. ws://127.0.0.1:8010/ws) when set.
-func TestSmoke30Players(t *testing.T) {
+func TestSmoke60Players(t *testing.T) {
 	url := os.Getenv("RELAY_URL")
 	if url == "" {
 		url = startRelay(t, testConfig()).url
 	}
-	const nPlayers = 30
+	const nPlayers = 60
 
 	host, created := createRoom(t, url)
 	code := created.str("code")

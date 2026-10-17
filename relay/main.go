@@ -34,18 +34,17 @@ type Config struct {
 }
 
 const (
-	maxMessageBytes = 4 << 10
+	maxMessageBytes = 8 << 10
 	msgsPerSecond   = 20
 	maxNameRunes    = 32
 	writeTimeout    = 10 * time.Second
-	sendQueue       = 64
 )
 
 func defaultConfig() Config {
 	return Config{
 		Listen:         "127.0.0.1:8010",
 		AllowedOrigins: []string{"maths.codingtony.com", "localhost:5173", "localhost:4173"},
-		MaxPlayers:     30,
+		MaxPlayers:     60,
 		EventsPath:     "/var/log/mc-relay/events.jsonl",
 		HostGrace:      2 * time.Minute,
 		IdleTTL:        2 * time.Hour,

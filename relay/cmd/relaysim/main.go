@@ -147,7 +147,7 @@ func run() int {
 	flag.StringVar(&cfg.url, "url", "ws://127.0.0.1:8010/ws", "relay WebSocket URL")
 	flag.StringVar(&cfg.origin, "origin", "https://maths.codingtony.com", "Origin header of the upgrade (empty: none)")
 	flag.Int64Var(&cfg.seed, "seed", 0, "run seed (default: time-based; always printed)")
-	flag.IntVar(&cfg.n, "n", 100, "number of scenarios")
+	flag.IntVar(&cfg.n, "n", 0, "number of scenarios (0 = one pass over the suite: 60, 61 with -slow)")
 	flag.IntVar(&cfg.concurrency, "concurrency", 10, "scenarios run in parallel")
 	flag.StringVar(&cfg.only, "only", "", "run only `name#i` (exact), or the scenarios whose name#i matches this regexp")
 	flag.DurationVar(&cfg.timeout, "timeout", 3*time.Minute, "per-scenario timeout")
@@ -156,7 +156,7 @@ func run() int {
 	flag.StringVar(&cfg.jsonPath, "json", "", "write a JSON report to this file (- for stdout)")
 	flag.Float64Var(&cfg.connectRate, "connect-rate", 8, "WebSocket handshakes per second, all scenarios together")
 	flag.Float64Var(&cfg.speed, "speed", 20, "race time compression (scripted answer time / speed = real time)")
-	flag.IntVar(&cfg.maxPlayers, "max-players", 30, "the relay's MAX_PLAYERS (capacity scenario)")
+	flag.IntVar(&cfg.maxPlayers, "max-players", 60, "the relay's MAX_PLAYERS (capacity scenario)")
 	flag.DurationVar(&cfg.msgInterval, "msg-interval", 100*time.Millisecond, "minimum interval between messages on one connection (relay limit: 20/s)")
 	flag.BoolVar(&cfg.slow, "slow", false, "include slow scenarios (host gone past the 2 min grace)")
 	flag.Parse()
@@ -165,9 +165,12 @@ func run() int {
 	if !seedSet {
 		cfg.seed = time.Now().UnixNano()
 	}
-	if cfg.connectRate <= 0 || cfg.speed <= 0 || cfg.concurrency < 1 || cfg.maxPlayers < 1 {
-		fmt.Fprintln(os.Stderr, "relaysim: -connect-rate, -speed, -concurrency and -max-players must be positive")
+	if cfg.connectRate <= 0 || cfg.speed <= 0 || cfg.concurrency < 1 || cfg.maxPlayers < 1 || cfg.n < 0 {
+		fmt.Fprintln(os.Stderr, "relaysim: -connect-rate, -speed, -concurrency, -max-players and -n must be positive")
 		return 2
+	}
+	if cfg.n == 0 {
+		cfg.n = len(suite(cfg.slow))
 	}
 
 	plans, err := selectScenarios(cfg)
@@ -237,8 +240,9 @@ type scenarioPlan struct {
 var exactOnly = regexp.MustCompile(`^([a-z_]+)#(\d+)$`)
 
 func selectScenarios(cfg config) ([]scenarioPlan, error) {
+	s := suite(cfg.slow)
 	plan := func(i int) scenarioPlan {
-		a := pickArchetype(scenarioRNG(cfg.seed, i), cfg.slow)
+		a := s[i%len(s)]
 		return scenarioPlan{idx: i, arch: a, id: fmt.Sprintf("%s#%d", a.name, i)}
 	}
 	if m := exactOnly.FindStringSubmatch(cfg.only); m != nil {
@@ -282,7 +286,7 @@ func (s *sim) replayCmd(only string) string {
 	if s.cfg.slow {
 		cmd += " -slow"
 	}
-	if s.cfg.maxPlayers != 30 {
+	if s.cfg.maxPlayers != 60 {
 		cmd += fmt.Sprintf(" -max-players %d", s.cfg.maxPlayers)
 	}
 	if s.cfg.speed != 20 {
@@ -304,7 +308,6 @@ func (s *sim) runScenario(p scenarioPlan) result {
 	defer cancelT()
 	ctx, cancel := context.WithCancelCause(tctx)
 	sc := &scenario{sim: s, idx: p.idx, arch: p.arch, id: p.id, rng: scenarioRNG(s.cfg.seed, p.idx), ctx: ctx, cancel: cancel}
-	pickArchetype(sc.rng, s.cfg.slow) // same draw as selectScenarios
 	func() {
 		defer func() {
 			if r := recover(); r != nil && r != errAbort {

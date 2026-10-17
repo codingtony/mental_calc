@@ -42,7 +42,7 @@ tokens in `sessionStorage` to reconnect.
 
 | Message | Effect |
 |---|---|
-| `join {code, name, playerToken?}` | `code` is case-insensitive. `name` is trimmed, control characters are stripped and it is cut to 32 characters. Reply: `joined {playerId, playerToken, settings, phase, seed?}` (`seed` when `phase` ≠ `lobby`). A known `playerToken` reconnects the same player (also mid-race, if the player was in the race) and keeps the original name; an unknown token is ignored (fresh join). After a reconnect the player also gets the latest personal `standings` (racing) or `ended` (ended). If the token is already connected elsewhere, that socket is closed with code 4001. Errors: `not_found`, `full`, `started`, `bad_name`. |
+| `join {code, name, playerToken?}` | `code` is case-insensitive. `name` is trimmed, control characters are stripped and it is cut to 32 characters. Reply: `joined {playerId, playerToken, settings, phase, seed?}` (`seed` when `phase` ≠ `lobby`). A known `playerToken` reconnects the same player (also mid-race, if the player was in the race) and keeps the original name; an unknown token is ignored (fresh join). After a reconnect the player also gets the latest personal `standings` (racing) or `ended` (ended). If the token is already connected elsewhere, that socket is closed with code 4001. Errors: `not_found`, `full`, `started`, `bad_name`, `name_taken` (another connected player in the room already uses this name, case-insensitive). |
 | `progress {done, status, elapsedMs}` | Send on every correct answer, crash and finish. `status`: `racing \| finished \| crashed`; `elapsedMs` from the local start (end of the countdown). Forwarded to the host as `progress {playerId, done, status, elapsedMs}`. Silently dropped outside `racing` or from a player not in the race. |
 
 ## Relay → host
@@ -66,7 +66,8 @@ tokens in `sessionStorage` to reconnect.
 
 ## Both directions
 
-- `error {reason}`: `not_found`, `full`, `started`, `bad_name`, `bad_token`, `bad_request` (unparseable,
+- `error {reason}`: `not_found`, `full`, `started`, `bad_name`, `name_taken` (another connected player in
+  the room already uses this name, case-insensitive), `bad_token`, `bad_request` (unparseable,
   unknown or wrong-role message), `not_allowed` (valid message in the wrong phase), `rate_limited`.
   Except for `rate_limited`, the socket stays open; a failed `create`/`join` can be retried.
 - `closed {reason: "host_gone" | "idle" | "shutdown"}`: sent to everyone in the room right before the
@@ -80,11 +81,12 @@ WebSocket close codes: 4000 kicked, 4001 replaced by a newer connection with the
 ## Rules and limits
 
 - Room code: 5 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`.
-- A room has 1 host and up to `MAX_PLAYERS` (default 30) connected players (`full` beyond that).
+- A room has 1 host and up to `MAX_PLAYERS` (default 60) connected players (`full` beyond that).
 - The room closes 2 minutes after the host disconnects (`host_gone`) unless the host resumes, and
   after 2 hours without any message (`idle`). Everything is in memory; a relay restart closes all
   rooms.
-- 4 KiB per message (a 30-player `standings` is about 2.1 KiB), 20 messages/s per connection.
+- 8 KiB per message (a 60-player `standings` is about 4 KiB, up to 5 KiB with 32-character names),
+  20 messages/s per connection.
 - The upgrade is refused with 403 unless `Origin` is absent or matches `ALLOWED_ORIGINS`.
 
 ## Ranking (done by the host)
@@ -98,7 +100,7 @@ WebSocket close codes: 4000 kicked, 4001 replaced by a newer connection with the
 
 Configuration (env, flags override): `LISTEN` (`127.0.0.1:8010`), `ALLOWED_ORIGINS`
 (comma-separated host patterns, default `maths.codingtony.com,localhost:5173,localhost:4173`),
-`MAX_PLAYERS` (30), `EVENTS_PATH` (`/var/log/mc-relay/events.jsonl`, empty disables),
+`MAX_PLAYERS` (60), `EVENTS_PATH` (`/var/log/mc-relay/events.jsonl`, empty disables),
 `STATS_TOKEN` (env only).
 
 - `GET /healthz` → `200 ok`.
@@ -115,8 +117,12 @@ Configuration (env, flags override): `LISTEN` (`127.0.0.1:8010`), `ALLOWED_ORIGI
     with `ended_by`: `all_done`, `host` (End clicked with players still racing), `rematch`, `closed`.
 
 Tests: `go test ./...`. Smoke against a running relay:
-`RELAY_URL=ws://127.0.0.1:8010/ws go test -run TestSmoke30Players -v .`
+`RELAY_URL=ws://127.0.0.1:8010/ws go test -run TestSmoke60Players -v .`
 
-Scenario simulator (about 100 replayable race scenarios against any relay URL, production
-included): `go run ./cmd/relaysim -url ws://127.0.0.1:8010/ws -n 100`. Replay one scenario with
-`-seed S -only name#i`. Flags and scenarios: `cmd/relaysim/README.md`.
+Scenario simulator (a fixed suite of 60 replayable scenarios, normal and edge cases, against any
+relay URL, production included): `go run ./cmd/relaysim -url ws://127.0.0.1:8010/ws`. Replay one
+scenario with `-seed S -only name#i`. Flags and scenarios: `cmd/relaysim/README.md`.
+
+Race bots (fill a room hosted in a browser with simulated players, to try the host screen):
+host a race in the browser, then `go run ./cmd/racebots -code CODE` (60 players by default; bots 41+
+reuse names, so they show the `name_taken` retry as "Ebba A"). Flags: `go run ./cmd/racebots -h`.
