@@ -817,7 +817,8 @@ button {
 }
 
 .room-code.big {
-  font-size: clamp(56px, 9vw, 120px);
+  /* vh term: on a short laptop screen the code alone must not push the player list under the buttons. */
+  font-size: clamp(48px, min(9vw, 13vh), 120px);
   line-height: 1;
 }
 
@@ -901,6 +902,11 @@ button {
   display: none;
 }
 
+/* One row of name chips: with few players the box is no taller than its names. */
+#host-lobby > .scroll-box {
+  min-height: 50px;
+}
+
 #host-board > .scroll-box {
   margin-top: 12px;
 }
@@ -960,6 +966,33 @@ button {
   margin: 12px -24px -24px;
   padding: 12px 24px 20px;
   background: rgba(255, 255, 255, 0.97);
+}
+
+/* Short laptop screens (browser chrome eats the height): tighter vertical
+   spacing so the player list or score board keeps its room without the
+   panel scrolling and the pinned buttons covering it. */
+@media (max-height: 700px) {
+  .panel.host,
+  .panel.results {
+    padding-top: 14px;
+  }
+
+  .panel.host .field-label {
+    margin-top: 8px;
+  }
+
+  #host-lobby > .choices,
+  #host-board > .choices,
+  .panel.results > .choices {
+    padding-top: 8px;
+    padding-bottom: 12px;
+  }
+
+  #host-lobby > .choices > button,
+  #host-board > .choices > button,
+  .panel.results > .choices > button {
+    margin-top: 4px;
+  }
 }
 
 #host-url {
@@ -1046,8 +1079,8 @@ button {
 }
 
 #host-qr {
-  width: 220px;
-  height: 220px;
+  width: clamp(140px, 30vh, 220px);
+  height: clamp(140px, 30vh, 220px);
   image-rendering: pixelated;
   border: 3px solid #000;
   border-radius: 8px;
