@@ -842,8 +842,108 @@ button {
   font-size: 16px;
 }
 
+/* The host panel never scrolls as a whole: header, settings and buttons keep
+   their size and the player list (lobby) or lanes (race) take the remaining
+   height and scroll on their own, so Start/End stay on screen with 60 players. */
 .panel.host {
+  display: flex;
+  flex-direction: column;
   width: min(1100px, 100%);
+}
+
+#host-lobby,
+#host-board {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#host-lobby > *,
+#host-board > * {
+  flex-shrink: 0;
+}
+
+#host-players,
+#lanes {
+  flex: 0 1 auto;
+  min-height: 96px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Edge shadows appear only where more content is hidden. */
+  background:
+    linear-gradient(#fff 30%, rgba(255, 255, 255, 0)) top / 100% 24px no-repeat local,
+    linear-gradient(rgba(255, 255, 255, 0), #fff 70%) bottom / 100% 24px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.35), transparent) top / 100% 14px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.35), transparent) bottom / 100% 14px no-repeat scroll,
+    #fff;
+  border: 2px solid #000;
+  border-radius: 10px;
+}
+
+#host-players {
+  padding: 6px 4px;
+  align-content: flex-start;
+}
+
+#lanes {
+  padding: 4px 8px;
+}
+
+#host-players:empty {
+  display: none;
+}
+
+/* Always-visible scrollbar (macOS hides overlay scrollbars until you scroll). */
+#host-players::-webkit-scrollbar,
+#lanes::-webkit-scrollbar {
+  width: 12px;
+}
+
+#host-players::-webkit-scrollbar-thumb,
+#lanes::-webkit-scrollbar-thumb {
+  background: #000;
+  border: 3px solid #fff;
+  border-radius: 6px;
+}
+
+/* On a phone the header alone overflows and the panel scrolls: keep the
+   buttons pinned to the panel's bottom edge (no effect when nothing scrolls). */
+#host-lobby > .choices,
+#host-board > .choices {
+  position: sticky;
+  bottom: -24px;
+  z-index: 2;
+  margin: 12px -24px -24px;
+  padding: 12px 24px 20px;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+#host-url {
+  overflow-wrap: anywhere;
+}
+
+/* Overlaps the bottom edge of the scrolling list; click scrolls one page. */
+.more-hint {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  margin: -16px 0 0;
+  padding: 2px 18px;
+  background: #000;
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+  animation: more-bob 1.2s ease-in-out infinite;
+}
+
+@keyframes more-bob {
+  50% {
+    transform: translateY(3px);
+  }
 }
 
 .host-settings {
@@ -926,8 +1026,22 @@ button {
 
 #lanes {
   margin: 12px 0 0;
-  padding: 0;
   list-style: none;
+}
+
+/* "Show all players" with a full class: thinner lanes so more fit on a projector. */
+#lanes:has(> li:nth-child(13)) .lane {
+  padding: 1px 0;
+  font-size: 15px;
+}
+
+#lanes:has(> li:nth-child(13)) .track {
+  height: 18px;
+}
+
+#lanes:has(> li:nth-child(13)) .kart {
+  top: 0;
+  height: 14px;
 }
 
 .lane {

@@ -264,6 +264,18 @@ export function renderHostPlayers(players: { id: string; name: string; connected
     .join("");
 }
 
+/** Shows `hint` while `list` has content hidden below its fold (overlay scrollbars hide that). */
+export function attachScrollHint(list: HTMLElement, hint: HTMLElement): void {
+  const update = (): void => {
+    hint.classList.toggle("hidden", list.scrollTop + list.clientHeight >= list.scrollHeight - 4);
+  };
+  list.addEventListener("scroll", update, { passive: true });
+  new ResizeObserver(update).observe(list);
+  new MutationObserver(update).observe(list, { childList: true });
+  hint.addEventListener("click", () => list.scrollBy({ top: list.clientHeight * 0.8, behavior: "smooth" }));
+  update();
+}
+
 export function renderHostSettings(settings: RoomSettings): void {
   for (const cup of CUPS) {
     const b = document.querySelector<HTMLElement>(`[data-host-cup="${cup.id}"]`)!;

@@ -22,6 +22,7 @@ import { RaceSession } from "./race";
 import { mulberry32, randomSeed } from "./rng";
 import { addGame, computeScore, cupById, loadPrefs, savePrefs } from "./storage";
 import {
+  attachScrollHint,
   el,
   formatQuestion,
   renderAudioToggles,
@@ -79,6 +80,8 @@ const nameEl = el<HTMLInputElement>("name");
 const joinCodeEl = el<HTMLInputElement>("join-code");
 const joinNameEl = el<HTMLInputElement>("join-name");
 const showAllEl = el<HTMLInputElement>("host-showall");
+attachScrollHint(el("host-players"), el("host-players-more"));
+attachScrollHint(el("lanes"), el("lanes-more"));
 
 let screen: Screen = "intro";
 let session: RaceSession | null = null;
