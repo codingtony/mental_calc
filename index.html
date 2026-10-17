@@ -215,7 +215,7 @@
     <div id="mp-offline" class="hidden" data-i18n="mpReconnecting"></div>
 
     <section id="screen-results" class="screen hidden">
-      <div class="panel wide">
+      <div class="panel wide results">
         <h2 id="result-title" class="heading"></h2>
         <div id="mp-podium" class="podium-wrap hidden"></div>
         <div id="result-position"></div>
@@ -224,7 +224,11 @@
           <button class="tab" data-board="last" data-i18n="lastGames"></button>
           <button class="tab" data-board="high" data-i18n="highScores"></button>
         </div>
-        <div class="board-wrap"><table id="board"></table></div>
+        <div id="board-box" class="scroll-box">
+          <button id="board-less" class="more-hint up hidden" aria-hidden="true" tabindex="-1">▲</button>
+          <div class="board-wrap"><table id="board"></table></div>
+          <button id="board-more" class="more-hint hidden" aria-hidden="true" tabindex="-1">▼</button>
+        </div>
         <div class="choices">
           <button id="again-btn" class="big-btn" data-i18n="raceAgain"></button>
           <button id="cups-btn" class="secondary-btn" data-i18n="changeCup"></button>

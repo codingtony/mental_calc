@@ -272,7 +272,8 @@ export function attachScrollHint(list: HTMLElement, up: HTMLElement, down: HTMLE
   };
   list.addEventListener("scroll", update, { passive: true });
   new ResizeObserver(update).observe(list);
-  new MutationObserver(update).observe(list, { childList: true });
+  // subtree: the score board replaces its table's rows, not the list's children.
+  new MutationObserver(update).observe(list, { childList: true, subtree: true });
   const page = (dir: number) => () => list.scrollBy({ top: dir * list.clientHeight * 0.8, behavior: "smooth" });
   up.addEventListener("click", page(-1));
   down.addEventListener("click", page(1));

@@ -92,6 +92,7 @@ const joinNameEl = el<HTMLInputElement>("join-name");
 const showAllEl = el<HTMLInputElement>("host-showall");
 attachScrollHint(el("host-players"), el("host-players-less"), el("host-players-more"));
 attachScrollHint(el("lanes"), el("lanes-less"), el("lanes-more"));
+attachScrollHint(el("board").parentElement!, el("board-less"), el("board-more"));
 
 let screen: Screen = "intro";
 let session: RaceSession | null = null;
@@ -607,7 +608,7 @@ function showResults(s: RaceSession | null, elapsedMs: number): void {
   const mp = player !== null;
   // Multiplayer games never touch the local high scores: no board, no solo buttons.
   document.querySelector(".tabs")!.classList.toggle("hidden", mp);
-  el("board").parentElement!.classList.toggle("hidden", mp);
+  el("board-box").classList.toggle("hidden", mp);
   for (const id of ["again-btn", "cups-btn", "menu-btn"]) el(id).classList.toggle("hidden", mp);
   el("mp-leave-btn").classList.toggle("hidden", !mp);
   el("mp-podium").classList.toggle("hidden", !mp);
