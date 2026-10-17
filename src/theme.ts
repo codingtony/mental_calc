@@ -1,7 +1,8 @@
 import type { PrefabKey } from "./assets";
 import type { Rgb } from "./look";
+import type { SongId } from "./songs";
 
-/** Scenery themes; snow/desert later = another SceneryTheme object. */
+/** Scenery themes; a theme object is the per-circuit definition (snow/desert circuits later = another SceneryTheme object with its own raceSong). */
 export type ThemeId = "meadow";
 
 export interface Vegetation {
@@ -22,6 +23,8 @@ export interface SceneryTheme {
   grassSpeckles: readonly Rgb[];
   hill: Rgb;
   vegetation: readonly Vegetation[];
+  /** Music of a race on this circuit. */
+  raceSong: SongId;
 }
 
 export const MEADOW: SceneryTheme = {
@@ -42,4 +45,5 @@ export const MEADOW: SceneryTheme = {
     { prefab: "bush", count: 60, height: [1.2, 2], clearance: 14 },
     { prefab: "rock", count: 20, height: [1, 2.5], clearance: 14 },
   ],
+  raceSong: "meadowRace",
 };

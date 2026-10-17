@@ -90,6 +90,7 @@ interface Smoke {
 export class World {
   readonly scene: Scene;
   readonly track: Track;
+  readonly theme: SceneryTheme;
 
   private readonly camera: UniversalCamera;
   private readonly sun: DirectionalLight;
@@ -126,6 +127,7 @@ export class World {
   }
 
   private constructor(scene: Scene, assets: Assets, playerLook: RiderLook, theme: SceneryTheme) {
+    this.theme = theme;
     this.scene = scene;
     const horizon = new Color3(...theme.skyHorizon);
     scene.clearColor = new Color4(horizon.r, horizon.g, horizon.b, 1);

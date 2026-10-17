@@ -21,6 +21,7 @@ import { displayStatus, TOP_N } from "./net/standings";
 import { defaultQuestionConfig, generateQuestionBank, pickQuestions } from "./questions";
 import { RaceSession } from "./race";
 import { mulberry32, randomSeed } from "./rng";
+import { MENU_SONG } from "./songs";
 import { addGame, computeScore, cupById, loadPrefs, savePrefs } from "./storage";
 import {
   attachScrollHint,
@@ -141,6 +142,7 @@ function showIntro(): void {
   renderIntroTitle();
   showOnly("screen-intro");
   world.setMode("intro", performance.now());
+  audio.setSong(MENU_SONG);
   later(INTRO_MS, showMenu);
   const skip = () => {
     if (screen === "intro") showMenu();
@@ -156,6 +158,7 @@ function showMenu(): void {
   screen = "menu";
   showOnly("screen-menu");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   el("menu-error").textContent = "";
   renderMenu(prefs);
   el("mp-offline").classList.add("hidden");
@@ -170,6 +173,7 @@ function showSetup(): void {
   screen = "setup";
   showOnly("screen-setup");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   nameEl.value = prefs.name;
   el("name-error").textContent = "";
   renderSetup(prefs);
@@ -251,6 +255,7 @@ function showCups(): void {
   screen = "cups";
   showOnly("screen-cups");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   renderCups(prefs);
 }
 
@@ -310,6 +315,8 @@ function startRace(selected: Cup, mp: RaceStart | null = null): void {
   perQuestion = totalDistance / session.numQuestions;
   world.setupRace(totalDistance);
   world.setMode("race", performance.now());
+  audio.setSong(null); // silent grid; race music starts on GO
+  audio.engine(true, 0); // idle
 
   screen = "race";
   hudPosition = 0;
@@ -338,7 +345,7 @@ function startRace(selected: Cup, mp: RaceStart | null = null): void {
     answerEl.disabled = false;
     answerEl.focus();
     showQuestion();
-    audio.engine(true, 1);
+    audio.setSong(world.theme.raceSong);
   });
 }
 
@@ -395,6 +402,7 @@ function submitAnswer(value: string): void {
 function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number): void {
   const s = session!;
   audio.engine(false);
+  audio.setSong(null);
   answerEl.disabled = true;
   answerEl.blur();
   el("question").classList.add("hidden");
@@ -592,6 +600,9 @@ function showResults(s: RaceSession | null, elapsedMs: number): void {
   screen = "results";
   showOnly("screen-results");
   world.setMode("menu", performance.now());
+  // Kids who drove get a jingle: solo = goal met, class race = reached the finish line.
+  if (s) audio.playJingle((player ? s.status === "finished" : s.won()) ? "jingleWin" : "jingleLose", MENU_SONG);
+  else audio.setSong(MENU_SONG);
   world.setRivalSlots(null);
   const mp = player !== null;
   // Multiplayer games never touch the local high scores: no board, no solo buttons.
@@ -718,6 +729,7 @@ function showJoin(code: string, error = ""): void {
   screen = "join";
   showOnly("screen-join");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   el("mp-offline").classList.add("hidden");
   joinCodeEl.value = code;
   joinNameEl.value = prefs.name;
@@ -749,6 +761,7 @@ function showWait(): void {
   screen = "wait";
   showOnly("screen-wait");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   renderWait();
 }
 
@@ -809,6 +822,7 @@ function showHost(): void {
   hostTimerText = "";
   showOnly("screen-host");
   world.setMode("menu", performance.now());
+  audio.setSong(MENU_SONG);
   renderHost();
 }
 
@@ -973,6 +987,7 @@ else void autoQuality();
 if (import.meta.env.DEV) {
   // Dev-only hook for console/automated verification; routes through the real submit path.
   window.__mc = {
+    audio,
     session: () => session,
     solve: () => submitAnswer(String(session!.currentQuestion()!.answer)),
     fail: () => submitAnswer("99999"),

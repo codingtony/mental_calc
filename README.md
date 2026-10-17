@@ -79,7 +79,9 @@ sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `m
 | `src/assets.ts`, `src/assets/models/` | glTF loading, prefabs (thin instances), moto template; models + `CREDITS.md` |
 | `src/look.ts`, `src/theme.ts` | Rider look (bike/suit/helmet, sent to multiplayer rooms) and scenery theme data |
 | `src/quality.ts` | Load-time frame-rate probe that lowers graphics quality on slow devices |
-| `src/audio.ts` | WebAudio music sequencer and sound effects |
+| `src/audio.ts` | `GameAudio`: master bus, song playback (menu, per-circuit race song, results jingles), sound effects, motorbike engine with gears |
+| `src/music.ts`, `src/songs.ts` | Song notation compiler and the composed songs (`SONGS`); a circuit's `SceneryTheme.raceSong` picks its race music |
+| `src/synth.ts` | WebAudio instrument voices, per-song mixer (reverb, delay) and noise/envelope helpers |
 | `src/storage.ts`, `src/i18n.ts`, `src/ui.ts` | Persistence, translations, DOM rendering |
 | `src/rng.ts` | Seeded PRNG (`mulberry32`): same seed → same questions on every device |
 | `src/net/protocol.ts` | Relay message types (mirror of `relay/PROTOCOL.md`) |
