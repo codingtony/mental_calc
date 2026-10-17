@@ -264,15 +264,18 @@ export function renderHostPlayers(players: { id: string; name: string; connected
     .join("");
 }
 
-/** Shows `hint` while `list` has content hidden below its fold (overlay scrollbars hide that). */
-export function attachScrollHint(list: HTMLElement, hint: HTMLElement): void {
+/** Shows `up`/`down` while `list` has content hidden above/below (overlay scrollbars hide that). */
+export function attachScrollHint(list: HTMLElement, up: HTMLElement, down: HTMLElement): void {
   const update = (): void => {
-    hint.classList.toggle("hidden", list.scrollTop + list.clientHeight >= list.scrollHeight - 4);
+    up.classList.toggle("hidden", list.scrollTop <= 4);
+    down.classList.toggle("hidden", list.scrollTop + list.clientHeight >= list.scrollHeight - 4);
   };
   list.addEventListener("scroll", update, { passive: true });
   new ResizeObserver(update).observe(list);
   new MutationObserver(update).observe(list, { childList: true });
-  hint.addEventListener("click", () => list.scrollBy({ top: list.clientHeight * 0.8, behavior: "smooth" }));
+  const page = (dir: number) => () => list.scrollBy({ top: dir * list.clientHeight * 0.8, behavior: "smooth" });
+  up.addEventListener("click", page(-1));
+  down.addEventListener("click", page(1));
   update();
 }
 

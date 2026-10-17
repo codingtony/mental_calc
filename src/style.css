@@ -864,10 +864,30 @@ button {
   flex-shrink: 0;
 }
 
-#host-players,
-#lanes {
+/* The box takes the flexible height; the list inside it scrolls and the
+   ▲/▼ pills overlay its top/bottom edges without taking layout space. */
+#host-lobby > .scroll-box,
+#host-board > .scroll-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 0 1 auto;
   min-height: 96px;
+}
+
+.scroll-box:has(> #host-players:empty) {
+  display: none;
+}
+
+#host-board > .scroll-box {
+  margin-top: 12px;
+}
+
+#host-players,
+#lanes {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   /* Edge shadows appear only where more content is hidden. */
@@ -888,10 +908,6 @@ button {
 
 #lanes {
   padding: 4px 8px;
-}
-
-#host-players:empty {
-  display: none;
 }
 
 /* Always-visible scrollbar (macOS hides overlay scrollbars until you scroll). */
@@ -923,12 +939,16 @@ button {
   overflow-wrap: anywhere;
 }
 
-/* Overlaps the bottom edge of the scrolling list; click scrolls one page. */
+/* Overlaps the list's bottom (▼) or top (▲) edge; click scrolls one page.
+   z-index above the pinned button row so it never sits under its white background. */
 .more-hint {
-  position: relative;
-  z-index: 1;
-  align-self: center;
-  margin: -16px 0 0;
+  position: absolute;
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  width: max-content;
+  margin: 0 auto;
   padding: 2px 18px;
   background: #000;
   color: #fff;
@@ -938,6 +958,12 @@ button {
   line-height: 1.4;
   cursor: pointer;
   animation: more-bob 1.2s ease-in-out infinite;
+}
+
+.more-hint.up {
+  top: -12px;
+  bottom: auto;
+  animation-direction: reverse;
 }
 
 @keyframes more-bob {
@@ -1025,7 +1051,7 @@ button {
 }
 
 #lanes {
-  margin: 12px 0 0;
+  margin: 0;
   list-style: none;
 }
 

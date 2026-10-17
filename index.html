@@ -144,8 +144,11 @@
             </div>
           </div>
           <p id="host-count" class="field-label"></p>
-          <ul id="host-players" class="names"></ul>
-          <button id="host-players-more" class="more-hint hidden" aria-hidden="true" tabindex="-1">▼</button>
+          <div class="scroll-box">
+            <button id="host-players-less" class="more-hint up hidden" aria-hidden="true" tabindex="-1">▲</button>
+            <ul id="host-players" class="names"></ul>
+            <button id="host-players-more" class="more-hint hidden" aria-hidden="true" tabindex="-1">▼</button>
+          </div>
           <div class="choices">
             <button id="host-start" class="big-btn" data-i18n="mpStart"></button>
             <button id="host-close" class="secondary-btn" data-i18n="mpCloseRoom"></button>
@@ -158,8 +161,11 @@
             <span id="host-timer"></span>
           </div>
           <div id="host-podium" class="podium-wrap hidden"></div>
-          <ol id="lanes"></ol>
-          <button id="lanes-more" class="more-hint hidden" aria-hidden="true" tabindex="-1">▼</button>
+          <div class="scroll-box">
+            <button id="lanes-less" class="more-hint up hidden" aria-hidden="true" tabindex="-1">▲</button>
+            <ol id="lanes"></ol>
+            <button id="lanes-more" class="more-hint hidden" aria-hidden="true" tabindex="-1">▼</button>
+          </div>
           <div class="choices">
             <label class="checkbox"><input id="host-showall" type="checkbox" /> <span data-i18n="mpShowAll"></span></label>
             <button id="host-end" class="big-btn" data-i18n="mpEnd"></button>
