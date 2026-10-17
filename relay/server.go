@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -154,9 +155,10 @@ func (s *Server) handleCreate(c *client, data []byte) *Room {
 
 func (s *Server) handleJoin(c *client, data []byte) *Room {
 	var m struct {
-		Code        string `json:"code"`
-		Name        string `json:"name"`
-		PlayerToken string `json:"playerToken"`
+		Code        string          `json:"code"`
+		Name        string          `json:"name"`
+		PlayerToken string          `json:"playerToken"`
+		Look        json.RawMessage `json:"look"`
 	}
 	if json.Unmarshal(data, &m) != nil {
 		c.send(errorMsg("bad_request"))
@@ -173,7 +175,7 @@ func (s *Server) handleJoin(c *client, data []byte) *Room {
 		return nil
 	}
 	if reason := room.call(func(reply chan string) any {
-		return joinReq{c: c, name: name, token: m.PlayerToken, reply: reply}
+		return joinReq{c: c, name: name, token: m.PlayerToken, look: cleanLook(m.Look), reply: reply}
 	}); reason != "" {
 		c.send(errorMsg(reason))
 		return nil
@@ -183,6 +185,19 @@ func (s *Server) handleJoin(c *client, data []byte) *Room {
 
 func normalizeCode(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
+}
+
+// maxLookBytes caps the opaque rider look forwarded to the host.
+const maxLookBytes = 512
+
+// cleanLook keeps the join `look` only if it is a JSON object of at most
+// maxLookBytes; anything else is dropped (the join still succeeds).
+func cleanLook(raw json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(raw)
+	if len(raw) > maxLookBytes || len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil
+	}
+	return trimmed
 }
 
 // cleanName strips control characters, trims spaces and caps the length.

@@ -32,6 +32,26 @@ body {
   outline: none;
 }
 
+.boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: clamp(22px, 4vw, 40px);
+  font-style: italic;
+  color: #fff;
+  -webkit-text-stroke: 1px #000;
+  text-shadow: 2px 2px 0 #000;
+  pointer-events: none;
+}
+
+.credits {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 12px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -1065,7 +1085,7 @@ button {
   height: 18px;
 }
 
-#lanes:has(> li:nth-child(13)) .kart {
+#lanes:has(> li:nth-child(13)) .moto {
   top: 0;
   height: 14px;
 }
@@ -1099,7 +1119,7 @@ button {
   border-radius: 6px;
 }
 
-.lane .kart {
+.lane .moto {
   position: absolute;
   top: 1px;
   width: 24px;

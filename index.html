@@ -7,6 +7,7 @@
   </head>
   <body>
     <canvas id="renderCanvas"></canvas>
+    <p id="boot" class="boot" data-i18n="loading"></p>
 
     <section id="screen-intro" class="screen hidden">
       <h1 class="title" id="intro-title">Mental Calc GP</h1>
@@ -40,6 +41,7 @@
           <button class="choice" id="toggle-music">🎵 <span data-i18n="music"></span>: <b></b></button>
           <button class="choice" id="toggle-sound">🔊 <span data-i18n="sound"></span>: <b></b></button>
         </div>
+        <p class="credits">3D: <a href="https://poly.pizza/m/dse64pqMKAR" target="_blank" rel="noopener">Motorcycle</a> by Poly by Google (CC-BY 3.0) · Quaternius, Kenney (CC0)</p>
       </div>
     </section>
 
@@ -194,7 +196,7 @@
         <div id="mp-me"></div>
       </div>
       <ol id="standings"></ol>
-      <div id="lives"><span>❤️</span><span>❤️</span><span>❤️</span></div>
+      <div id="lives"></div>
       <div id="hud-controls">
         <button id="hud-music" class="icon-btn"></button>
         <button id="hud-sound" class="icon-btn"></button>

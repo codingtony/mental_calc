@@ -141,6 +141,32 @@ func TestNameTaken(t *testing.T) {
 	again.expect("joined")
 }
 
+func TestJoinLook(t *testing.T) {
+	r := startRelay(t, testConfig())
+	host, created := createRoom(t, r.url)
+	code := created.str("code")
+
+	look := map[string]any{"body": "boy", "bike": []any{0.0, 0.0, 1.0}, "helmet": "mirror"}
+	p := dial(t, r.url)
+	p.send(map[string]any{"t": "join", "code": code, "name": "Ann", "look": look})
+	p.expect("joined")
+	pj := host.expect("player_joined")
+	if fmt.Sprint(pj.m["look"]) != fmt.Sprint(look) {
+		t.Fatalf("look not forwarded: %s", pj.raw)
+	}
+
+	// Not an object, or too big: dropped, the join still succeeds.
+	big := map[string]any{"body": strings.Repeat("x", 600)}
+	for i, bad := range []any{"x", big} {
+		q := dial(t, r.url)
+		q.send(map[string]any{"t": "join", "code": code, "name": fmt.Sprint("Bo", i), "look": bad})
+		q.expect("joined")
+		if pj := host.expect("player_joined"); pj.m["look"] != nil {
+			t.Fatalf("bad look forwarded: %s", pj.raw)
+		}
+	}
+}
+
 func TestCapacity(t *testing.T) {
 	cfg := testConfig()
 	cfg.MaxPlayers = 2

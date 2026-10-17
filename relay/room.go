@@ -28,6 +28,7 @@ type (
 		c     *client
 		name  string
 		token string
+		look  json.RawMessage // opaque rider look, already size/shape checked; nil if none
 		reply chan string
 	}
 	resumeReq struct {
@@ -54,10 +55,11 @@ type (
 		Seed        json.RawMessage `json:"seed,omitempty"`
 	}
 	playerJoinedMsg struct {
-		T         string `json:"t"`
-		PlayerID  string `json:"playerId"`
-		Name      string `json:"name"`
-		Reconnect bool   `json:"reconnect,omitempty"`
+		T         string          `json:"t"`
+		PlayerID  string          `json:"playerId"`
+		Name      string          `json:"name"`
+		Reconnect bool            `json:"reconnect,omitempty"`
+		Look      json.RawMessage `json:"look,omitempty"`
 	}
 	playerLeftMsg struct {
 		T        string `json:"t"`
@@ -96,8 +98,9 @@ type progress struct {
 
 type player struct {
 	id, token, name string
-	conn            *client // nil while disconnected
-	inRace          bool    // connected when the current race started
+	look            json.RawMessage // from the fresh join; a reconnect keeps it, like the name
+	conn            *client         // nil while disconnected
+	inRace          bool            // connected when the current race started
 	prog            progress
 }
 
@@ -503,7 +506,7 @@ func (r *Room) handleJoin(req joinReq) string {
 		return "name_taken"
 	}
 	r.pruneRecords()
-	p := &player{id: r.newPlayerID(), token: randomHex(16), name: req.name, conn: c}
+	p := &player{id: r.newPlayerID(), token: randomHex(16), name: req.name, look: req.look, conn: c}
 	r.players[p.id] = p
 	r.byToken[p.token] = p
 	r.byConn[c] = p
@@ -541,7 +544,7 @@ func (r *Room) afterJoin(p *player, reconnect bool) {
 	case r.phase == phaseEnded && r.lastFinal != nil && p.inRace:
 		c.send(r.lastFinal.msgFor(p.id))
 	}
-	r.sendHost(playerJoinedMsg{T: "player_joined", PlayerID: p.id, Name: p.name, Reconnect: reconnect})
+	r.sendHost(playerJoinedMsg{T: "player_joined", PlayerID: p.id, Name: p.name, Reconnect: reconnect, Look: p.look})
 	r.broadcastLobby()
 	r.log.Info("player_joined", append([]any{"player_id", p.id, "reconnect", reconnect, "players", len(r.byConn)}, c.logAttrs()...)...)
 }
@@ -588,7 +591,7 @@ func (r *Room) handleResume(req resumeReq) string {
 	r.host = req.c
 	r.sendHost(createdMsg{T: "created", Code: r.code, HostToken: r.hostToken, Phase: r.phase})
 	for _, p := range r.order {
-		r.sendHost(playerJoinedMsg{T: "player_joined", PlayerID: p.id, Name: p.name})
+		r.sendHost(playerJoinedMsg{T: "player_joined", PlayerID: p.id, Name: p.name, Look: p.look})
 		if p.conn == nil {
 			r.sendHost(playerLeftMsg{T: "player_left", PlayerID: p.id, Reason: "disconnected"})
 		}

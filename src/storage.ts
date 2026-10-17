@@ -1,5 +1,6 @@
 import { CATEGORIES, CUPS, DIFFICULTIES, type Category, type CupId, type Difficulty } from "./config";
 import { LANGS, type Lang } from "./i18n";
+import { parseLook, type RiderLook } from "./look";
 
 // Prefixed keys: v1 (served at /1/) shares this origin and owns "highscore", "name", etc.
 const PREFS_KEY = "mcgp.prefs";
@@ -13,6 +14,8 @@ export interface Prefs {
   difficulty: Difficulty;
   music: boolean;
   sound: boolean;
+  /** Rider look bought in the shop; null = default rider. */
+  look: RiderLook | null;
 }
 
 export interface GameRecord {
@@ -52,6 +55,7 @@ export function loadPrefs(): Prefs {
     difficulty: typeof p.difficulty === "string" && p.difficulty in DIFFICULTIES ? (p.difficulty as Difficulty) : "medium",
     music: typeof p.music === "boolean" ? p.music : false,
     sound: typeof p.sound === "boolean" ? p.sound : false,
+    look: parseLook(p.look),
   };
 }
 

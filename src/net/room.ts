@@ -1,3 +1,4 @@
+import { parseLook, type RiderLook } from "../look";
 import { randomSeed } from "../rng";
 import { clearSession, Connection, loadSession, relayUrl, saveSession } from "./connection";
 import { CLOSE_KICKED, CLOSE_REPLACED } from "./protocol";
@@ -84,7 +85,7 @@ export class HostRoom {
       this.nextOrder = snapshot.nextOrder;
       this.final = snapshot.final;
       // Everyone is offline until the relay replays player_joined after the resume.
-      for (const p of snapshot.players) this.players.set(p.id, { ...p, connected: false });
+      for (const p of snapshot.players) this.players.set(p.id, { ...p, look: p.look ?? null, connected: false });
       this.standings = computeStandings(this.players.values());
       if (this.phase === "racing") this.startTicker();
     }
@@ -186,6 +187,7 @@ export class HostRoom {
         if (p) {
           p.connected = true;
           p.name = msg.name;
+          p.look = parseLook(msg.look) ?? p.look;
         } else {
           this.players.set(msg.playerId, {
             id: msg.playerId,
@@ -195,6 +197,7 @@ export class HostRoom {
             ms: 0,
             connected: true,
             order: this.nextOrder++,
+            look: parseLook(msg.look),
           });
         }
         break;
@@ -319,6 +322,7 @@ export class PlayerRoom {
   constructor(
     readonly code: string,
     readonly name: string,
+    private readonly look: RiderLook | null,
     private readonly listener: PlayerListener,
     session: PlayerSession | null = null,
   ) {
@@ -329,9 +333,13 @@ export class PlayerRoom {
     this.conn = new Connection(relayUrl(), {
       onOpen: () => {
         this.awaitingJoin = true;
-        this.conn.send(
-          this.playerToken ? { t: "join", code, name, playerToken: this.playerToken } : { t: "join", code, name },
-        );
+        this.conn.send({
+          t: "join",
+          code,
+          name,
+          ...(this.playerToken ? { playerToken: this.playerToken } : {}),
+          ...(this.look ? { look: this.look } : {}),
+        });
         this.listener.onConnection(true);
       },
       onMessage: (msg) => this.handle(msg),
@@ -345,10 +353,10 @@ export class PlayerRoom {
   }
 
   /** Rejoins the room of this tab after a reload (same seat), if any; `code` must match when given. */
-  static resume(listener: PlayerListener, code: string | null): PlayerRoom | null {
+  static resume(listener: PlayerListener, code: string | null, look: RiderLook | null): PlayerRoom | null {
     const s = loadSession<PlayerSession>("player");
     if (!s?.playerToken || (code !== null && code !== s.code)) return null;
-    return new PlayerRoom(s.code, s.name, listener, s);
+    return new PlayerRoom(s.code, s.name, look, listener, s);
   }
 
   sendProgress(done: number, status: ReportedStatus, elapsedMs: number): void {
