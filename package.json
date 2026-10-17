@@ -10,8 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@babylonjs/core": "latest",
-    "@babylonjs/loaders": "^9.27.1",
+    "@babylonjs/core": "9.27.1",
+    "@babylonjs/loaders": "9.27.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
