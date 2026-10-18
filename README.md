@@ -42,6 +42,9 @@ appear in "Last races" or "High scores".
 4. **Rematch**: on the podium screen press **Rematch**: everyone goes back to the waiting room with
    new questions, nobody types the code again. Change the settings if you like and start again.
 
+The join URL under the code is also a link: it opens a muted player tab (`&audio=0`) for trying
+the race on the same computer. The QR code has no `audio` parameter, so kids keep their own settings.
+
 If you reload your tab, the room comes back (same code, same players) as long as you return
 within 2 minutes. A kid whose Wi-Fi drops is shown as disconnected, keeps their place and
 carries on automatically when the connection returns.
@@ -61,6 +64,12 @@ At load the game measures the frame rate for 2 s (during the intro) and, on a sl
 the quality: level 1 = smaller/softer moto shadows, 2 = also renders at ⅔ resolution, 3 = no moto
 shadows and ½ resolution. It checks once more after a drop. The browser console logs the result
 (`[quality] 60 fps → level 0`). Force a level per tab with `?quality=0` … `?quality=3`.
+
+## Audio
+
+**Sound** and **Music** (🔊 on / 🔇 off) are saved in `mcgp.prefs`. `?audio=` overrides both for
+that page load only and is never saved: `0` = silent, `1` = sound effects only, `2` = music only,
+`3` = both. Any other value is ignored.
 
 ## Storage
 

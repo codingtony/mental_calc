@@ -38,8 +38,8 @@
         <p id="menu-error" class="error"></p>
 
         <div class="choices toggles">
-          <button class="choice" id="toggle-music">🎵 <span data-i18n="music"></span>: <b></b></button>
-          <button class="choice" id="toggle-sound">🔊 <span data-i18n="sound"></span>: <b></b></button>
+          <button class="choice" id="toggle-music"><span class="audio-icon"></span><span data-i18n="music"></span></button>
+          <button class="choice" id="toggle-sound"><span class="audio-icon"></span><span data-i18n="sound"></span></button>
         </div>
         <p class="credits">3D: <a href="https://poly.pizza/m/dse64pqMKAR" target="_blank" rel="noopener">Motorcycle</a> by Poly by Google (CC-BY 3.0) · Quaternius, Kenney (CC0)</p>
       </div>
@@ -117,7 +117,7 @@
             <div>
               <p class="field-label" data-i18n="mpCodeLabel"></p>
               <div id="host-code" class="room-code big"></div>
-              <p class="subtle"><span data-i18n="mpScanToJoin"></span><br /><b id="host-url"></b></p>
+              <p class="subtle"><span data-i18n="mpScanToJoin"></span><br /><a id="host-url" target="_blank" rel="noopener"></a></p>
             </div>
             <img id="host-qr" alt="" width="220" height="220" />
           </div>
@@ -198,8 +198,8 @@
       <ol id="standings"></ol>
       <div id="lives"></div>
       <div id="hud-controls">
-        <button id="hud-music" class="icon-btn"></button>
-        <button id="hud-sound" class="icon-btn"></button>
+        <button id="hud-music" class="icon-btn"><span class="audio-icon"></span><span data-i18n="music"></span></button>
+        <button id="hud-sound" class="icon-btn"><span class="audio-icon"></span><span data-i18n="sound"></span></button>
         <button id="quit-btn" class="icon-btn" data-i18n="quit"></button>
       </div>
     </section>

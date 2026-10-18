@@ -63,6 +63,18 @@ export function savePrefs(prefs: Prefs): void {
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
 }
 
+export interface AudioPrefs {
+  music: boolean;
+  sound: boolean;
+}
+
+/** `?audio=` bitmask: 1 = sound effects, 2 = music (0 none, 3 all). Anything else → null (ignored). */
+export function parseAudioParam(value: string | null): AudioPrefs | null {
+  if (value === null || !/^[0-3]$/.test(value)) return null;
+  const v = Number(value);
+  return { sound: (v & 1) !== 0, music: (v & 2) !== 0 };
+}
+
 function loadGames(): GameRecord[] {
   const raw = readJson(GAMES_KEY);
   return Array.isArray(raw) ? (raw as GameRecord[]) : [];

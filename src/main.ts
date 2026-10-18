@@ -22,7 +22,7 @@ import { defaultQuestionConfig, generateQuestionBank, pickQuestions } from "./qu
 import { RaceSession } from "./race";
 import { mulberry32, randomSeed } from "./rng";
 import { MENU_SONG } from "./songs";
-import { addGame, computeScore, cupById, loadPrefs, savePrefs } from "./storage";
+import { addGame, computeScore, cupById, loadPrefs, parseAudioParam, savePrefs, type AudioPrefs } from "./storage";
 import {
   attachScrollHint,
   el,
@@ -69,6 +69,9 @@ const PROD_JOIN_URL = "https://maths.codingtony.com/";
 const MP_MOTO_SLOTS = TOP_N;
 
 const prefs = loadPrefs();
+const audioOverride = parseAudioParam(new URLSearchParams(location.search).get("audio"));
+/** Live audio switches; `?audio=` applies to this page load only and is never saved. */
+const audioState: AudioPrefs = audioOverride ?? { music: prefs.music, sound: prefs.sound };
 setLang(prefs.lang);
 const playerLook = prefs.look ?? DEFAULT_PLAYER_LOOK;
 
@@ -82,8 +85,8 @@ const world = await World.create(engine, playerLook).catch((err: unknown) => {
 el("boot").remove();
 const audio = new GameAudio();
 
-audio.setMusic(prefs.music);
-audio.setSound(prefs.sound);
+audio.setMusic(audioState.music);
+audio.setSound(audioState.sound);
 
 const answerEl = el<HTMLInputElement>("answer");
 const nameEl = el<HTMLInputElement>("name");
@@ -161,7 +164,7 @@ function showMenu(): void {
   world.setMode("menu", performance.now());
   audio.setSong(MENU_SONG);
   el("menu-error").textContent = "";
-  renderMenu(prefs);
+  renderMenu();
   el("mp-offline").classList.add("hidden");
 }
 
@@ -187,7 +190,7 @@ document.querySelectorAll<HTMLButtonElement>(".flag").forEach((b) =>
     prefs.lang = b.dataset.lang as Lang;
     savePrefs(prefs);
     setLang(prefs.lang);
-    renderMenu(prefs);
+    renderMenu();
   }),
 );
 
@@ -208,17 +211,23 @@ document.querySelectorAll<HTMLButtonElement>("[data-difficulty]").forEach((b) =>
 );
 
 function toggleMusic(): void {
-  prefs.music = !prefs.music;
-  savePrefs(prefs);
-  audio.setMusic(prefs.music);
-  renderAudioToggles(prefs);
+  audioState.music = !audioState.music;
+  audio.setMusic(audioState.music);
+  renderAudioToggles(audioState);
+  if (audioOverride === null) {
+    prefs.music = audioState.music;
+    savePrefs(prefs);
+  }
 }
 
 function toggleSound(): void {
-  prefs.sound = !prefs.sound;
-  savePrefs(prefs);
-  audio.setSound(prefs.sound);
-  renderAudioToggles(prefs);
+  audioState.sound = !audioState.sound;
+  audio.setSound(audioState.sound);
+  renderAudioToggles(audioState);
+  if (audioOverride === null) {
+    prefs.sound = audioState.sound;
+    savePrefs(prefs);
+  }
 }
 
 el("toggle-music").addEventListener("click", toggleMusic);
@@ -850,6 +859,8 @@ function renderHost(): void {
         ? `${location.origin}${location.pathname}?room=${code}${relay ? `&relay=${encodeURIComponent(relay)}` : ""}`
         : `${PROD_JOIN_URL}?room=${code}`;
       el("host-url").textContent = url;
+      // Opens a local test player; muted so it doesn't double the host tab's audio.
+      el<HTMLAnchorElement>("host-url").href = `${url}&audio=0`;
       QRCode.toDataURL(url, { margin: 1, width: 440 }).then((src) => {
         if (hostQrCode === code) el<HTMLImageElement>("host-qr").src = src;
       });
@@ -997,8 +1008,8 @@ if (import.meta.env.DEV) {
   };
 }
 
-// The QR-code and reload paths skip the menu, which normally fills the HUD audio buttons.
-renderAudioToggles(prefs);
+// Fills every audio button (menu + HUD); afterwards only the toggles re-render them.
+renderAudioToggles(audioState);
 // A reload resumes this tab's room (host or player); `?room=CODE` (QR code) opens the join screen.
 const roomParam = new URLSearchParams(location.search).get("room")?.trim().toUpperCase() || null;
 host = HostRoom.resume(hostListener);

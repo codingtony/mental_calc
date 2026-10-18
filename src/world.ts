@@ -17,9 +17,9 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { finishPrefabs, loadAssets, place, type Assets } from "./assets";
-import { LANE_OFFSETS, RIVALS } from "./config";
+import { LANE_OFFSETS, RIVALS, TARGET_SPEED } from "./config";
 import type { RiderLook, Rgb } from "./look";
-import { createMoto, type Moto } from "./moto";
+import { createMoto, FOOT_DOWN_LEAN, type Moto } from "./moto";
 import { mulberry32 } from "./rng";
 import { MEADOW, type SceneryTheme } from "./theme";
 import { Track } from "./track";
@@ -45,6 +45,9 @@ const GRAVITY = 9.81;
 const MAX_LEAN = 0.6;
 /** Natural frequency (rad/s) of the player's progress spring: ~0.8 s to settle after an answer. */
 const PLAYER_SPRING = 6;
+/** Below this speed (m/s) a rider puts a foot down; the foot moves at FOOT_RATE (1/s). */
+const FOOT_DOWN_SPEED = 2;
+const FOOT_RATE = 8;
 /** Vegetation never comes closer than this to another placed prop. */
 const PROP_SPACING = 12;
 
@@ -103,6 +106,8 @@ export class World {
   /** Smoothed forward speed (m/s) and current lean (radians) per moto. */
   private readonly motoSpeed: number[] = [];
   private readonly motoLean: number[] = [];
+  /** Foot-down amount per moto: 0 = feet on the pegs, 1 = left foot on the ground. */
+  private readonly motoFoot: number[] = [];
   /** JSON of the look last applied to each moto, so unchanged looks are not rebuilt. */
   private readonly appliedLook: string[] = [];
   private menuStart: number[] = [];
@@ -118,6 +123,8 @@ export class World {
   private crashElapsed = -1;
   private smoke: Smoke[] = [];
   private readonly camTarget = new Vector3(0, 0, 0);
+  /** Finish orbit: camera position relative to the player moto, eased towards the orbit pose. */
+  private readonly finishOffset = new Vector3();
 
   /** Loads the 3D models, then builds the world. Rejects when a model fails to load. */
   static async create(engine: Engine, playerLook: RiderLook, theme: SceneryTheme = MEADOW): Promise<World> {
@@ -181,6 +188,7 @@ export class World {
       this.motoDist.push(0);
       this.motoSpeed.push(0);
       this.motoLean.push(0);
+      this.motoFoot.push(0);
     }
     this.setMode("intro", performance.now());
   }
@@ -190,6 +198,7 @@ export class World {
     this.modeT0 = nowMs;
     if (mode === "intro" || mode === "menu") this.resetPlayerEffects();
     if (mode === "menu") this.menuStart = this.motoDist.slice();
+    if (mode === "finish") this.camera.position.subtractToRef(this.motos[0].root.position, this.finishOffset);
   }
 
   /**
@@ -215,6 +224,9 @@ export class World {
       this.motoDist[i] = 0;
       this.motoSpeed[i] = 0;
       this.motoLean[i] = 0;
+      // Everyone waits on the grid with a foot down.
+      this.motoFoot[i] = 1;
+      this.motos[i].setFootDown(1);
       this.placeMoto(i, 0, LANE_OFFSETS[i], 0);
     }
   }
@@ -296,15 +308,21 @@ export class World {
       case "finish":
       case "crash":
         if (race) {
-          // Critically damped spring towards the race progress: the velocity stays continuous,
-          // so an answer's boost accelerates the moto instead of jumping to full speed in a frame.
-          // Exact solution per step: stable for any dt (slow devices hitch up to the 0.1 s cap).
-          const target = race.player * race.perQuestion;
-          const e = this.playerVis - target;
-          const k = Math.exp(-PLAYER_SPRING * dt);
-          const j = (this.playerVel + PLAYER_SPRING * e) * dt;
-          this.playerVis = target + (e + j) * k;
-          this.playerVel = (this.playerVel - PLAYER_SPRING * j) * k;
+          if (this.mode === "finish") {
+            // Past the line: ease to cruise speed and keep riding while the banner shows.
+            this.playerVel += (TARGET_SPEED - this.playerVel) * (1 - Math.exp(-2 * dt));
+            this.playerVis += this.playerVel * dt;
+          } else {
+            // Critically damped spring towards the race progress: the velocity stays continuous,
+            // so an answer's boost accelerates the moto instead of jumping to full speed in a frame.
+            // Exact solution per step: stable for any dt (slow devices hitch up to the 0.1 s cap).
+            const target = race.player * race.perQuestion;
+            const e = this.playerVis - target;
+            const k = Math.exp(-PLAYER_SPRING * dt);
+            const j = (this.playerVel + PLAYER_SPRING * e) * dt;
+            this.playerVis = target + (e + j) * k;
+            this.playerVel = (this.playerVel - PLAYER_SPRING * j) * k;
+          }
           this.driveMoto(0, this.playerVis, nowMs, dt);
           for (let i = 1; i < this.motos.length; i++) {
             this.driveMoto(i, (race.rivals[i - 1] ?? 0) * race.perQuestion, nowMs, dt);
@@ -344,6 +362,13 @@ export class World {
     const target = -Math.min(MAX_LEAN, Math.max(-MAX_LEAN, Math.atan((v * v * curvature) / GRAVITY)));
     this.motoLean[i] += (target - this.motoLean[i]) * (1 - Math.exp(-6 * dt));
 
+    const stopped = this.motoSpeed[i] < FOOT_DOWN_SPEED && !(i === 0 && this.crashElapsed >= 0);
+    const goal = stopped ? 1 : 0;
+    const foot = this.motoFoot[i] + (goal - this.motoFoot[i]) * (1 - Math.exp(-FOOT_RATE * dt));
+    // Snap once settled so setFootDown skips the re-pose in the steady state.
+    this.motoFoot[i] = Math.abs(goal - foot) < 1e-3 ? goal : foot;
+    this.motos[i].setFootDown(this.motoFoot[i]);
+
     this.placeMoto(i, distance, lateral, teleport ? 0 : delta / this.motos[i].wheelRadius);
   }
 
@@ -353,7 +378,8 @@ export class World {
     const root = moto.root;
     root.position.copyFrom(pos);
     root.position.y = 0;
-    root.rotation.set(0, heading, this.motoLean[i]);
+    // A stopped moto rests on the rider's left foot (positive rotation.z leans left).
+    root.rotation.set(0, heading, this.motoLean[i] + FOOT_DOWN_LEAN * this.motoFoot[i]);
     for (const w of moto.wheels) w.rotation.x += wheelSpin;
 
     if (i !== 0) return;
@@ -462,12 +488,18 @@ export class World {
     this.camera.fov = BASE_FOV + (0.15 * this.boostRemaining) / BOOST_SECONDS;
   }
 
+  /** Circles the player, following it as it keeps riding past the line. */
   private finishCamera(dt: number, t: number): void {
     const { pos, heading } = this.track.positionAt(this.motoDist[0], LANE_OFFSETS[0]);
     // Begin behind the moto (where the chase cam was), then circle around it.
     const angle = heading + Math.PI + 0.6 * t;
-    const desired = new Vector3(pos.x + 7 * Math.sin(angle), 2.2, pos.z + 7 * Math.cos(angle));
-    Vector3.LerpToRef(this.camera.position, desired, 1 - Math.exp(-dt * 5), this.camera.position);
+    const k = 1 - Math.exp(-dt * 5);
+    const o = this.finishOffset;
+    o.x += (7 * Math.sin(angle) - o.x) * k;
+    o.y += (2.2 - o.y) * k;
+    o.z += (7 * Math.cos(angle) - o.z) * k;
+    // Track height is 0, so the offset's y is the camera height.
+    this.camera.position.set(pos.x + o.x, o.y, pos.z + o.z);
     this.camTarget.set(pos.x, 1, pos.z);
     this.camera.fov = BASE_FOV;
   }

@@ -1,7 +1,7 @@
 import { CUPS, DIFFICULTIES, type Category, type CupId, type Difficulty } from "./config";
 import { fmtDate, fmtTime, getLang, ordinal, t } from "./i18n";
 import type { PlayerStatus, RoomSettings, TopRow } from "./net/protocol";
-import { bestFor, cupById, highScores, lastGames, type GameRecord, type Prefs } from "./storage";
+import { bestFor, cupById, highScores, lastGames, type AudioPrefs, type GameRecord, type Prefs } from "./storage";
 
 export function el<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -49,11 +49,10 @@ export function formatQuestion(text: string): string {
   return text.replace(" x ", " × ").replace(" / ", " ÷ ").replace(" - ", " − ") + " = ?";
 }
 
-export function renderMenu(prefs: Prefs): void {
+export function renderMenu(): void {
   document.querySelectorAll<HTMLButtonElement>(".flag").forEach((b) => {
     b.classList.toggle("active", b.dataset.lang === getLang());
   });
-  renderAudioToggles(prefs);
 }
 
 export function renderSetup(prefs: Prefs): void {
@@ -67,15 +66,19 @@ export function renderSetup(prefs: Prefs): void {
   });
 }
 
-export function renderAudioToggles(prefs: Prefs): void {
-  const music = el("toggle-music");
-  const sound = el("toggle-sound");
-  music.querySelector("b")!.textContent = t(prefs.music ? "on" : "off");
-  sound.querySelector("b")!.textContent = t(prefs.sound ? "on" : "off");
-  music.classList.toggle("selected", prefs.music);
-  sound.classList.toggle("selected", prefs.sound);
-  el("hud-music").textContent = prefs.music ? "🎵" : "🔇";
-  el("hud-sound").textContent = prefs.sound ? "🔊" : "🔈";
+export function renderAudioToggles(state: AudioPrefs): void {
+  const buttons: [string, boolean, boolean][] = [
+    ["toggle-music", state.music, true],
+    ["hud-music", state.music, false],
+    ["toggle-sound", state.sound, true],
+    ["hud-sound", state.sound, false],
+  ];
+  for (const [id, on, menu] of buttons) {
+    const button = el(id);
+    button.querySelector(".audio-icon")!.textContent = on ? "🔊" : "🔇";
+    button.setAttribute("aria-pressed", String(on));
+    if (menu) button.classList.toggle("selected", on);
+  }
 }
 
 export function configLine(category: Category, difficulty: Difficulty): string {

@@ -20,8 +20,6 @@ const STRINGS: Record<string, Entry> = {
   secondsPerQuestion: { sv: "{s} s per fråga", en: "{s} s per question", fr: "{s} s par question" },
   music: { sv: "Musik", en: "Music", fr: "Musique" },
   sound: { sv: "Ljud", en: "Sound", fr: "Son" },
-  on: { sv: "På", en: "On", fr: "Activé" },
-  off: { sv: "Av", en: "Off", fr: "Désactivé" },
   next: { sv: "Nästa", en: "Next", fr: "Suivant" },
   solo: { sv: "Kör solo", en: "Solo race", fr: "Course en solo" },
   chooseCup: { sv: "Välj cup", en: "Choose your cup", fr: "Choisis ta coupe" },

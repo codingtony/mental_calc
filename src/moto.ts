@@ -27,6 +27,8 @@ export interface Moto {
   /** For the shadow generator; rebuilt by setLook. */
   casters: AbstractMesh[];
   setLook(look: RiderLook): void;
+  /** 0 = both feet on the pegs, 1 = left foot on the ground (stopped). */
+  setFootDown(amount: number): void;
 }
 
 /** Standing height of a rider in metres (scaled from the model's rest pose). */
@@ -53,6 +55,19 @@ const TUCK: Record<string, readonly (readonly ["x" | "y" | "z", number])[]> = {
   "UpperArm.R": [["x", 0.89], ["y", 0.83], ["z", 0.7]],
   "LowerArm.R": [["x", -0.5], ["z", 0.42]],
   "UpperLeg.L": [["x", 0.2], ["z", -0.7], ["y", -0.1]],
+};
+/** Left lean (radians) of a stopped moto resting on the rider's left foot; FOOT_DOWN is fitted to it. */
+export const FOOT_DOWN_LEAN = 0.23;
+/**
+ * Extra local joint rotations from the tuck to the stopped pose (see TUCK): left leg swung down and
+ * out, knee ~20° bent, sole flat on the ground ~0.43 m left of the moto's centre when it leans by
+ * FOOT_DOWN_LEAN. `Foot.L` applies after the foot follows the shin, to flatten the sole. Fitted
+ * numerically for both bodies (same skeleton).
+ */
+const FOOT_DOWN: Record<string, readonly (readonly ["x" | "y" | "z", number])[]> = {
+  "UpperLeg.L": [["x", 0.879], ["z", -0.125], ["y", 0.296]],
+  "LowerLeg.L": [["x", -1.384]],
+  "Foot.L": [["x", -0.298], ["z", 0.046]],
 };
 const AXES = { x: Axis.X, y: Axis.Y, z: Axis.Z };
 
@@ -81,6 +96,19 @@ function refresh(node: TransformNode): void {
   for (const child of node.getChildren()) if (child instanceof TransformNode) refresh(child);
 }
 
+/** Applies local joint rotations (in order) on top of each joint's current rotation. */
+function rotateJoints(
+  joint: (j: string) => TransformNode,
+  table: Record<string, readonly (readonly ["x" | "y" | "z", number])[]>,
+): void {
+  for (const [j, rotations] of Object.entries(table)) {
+    const node = joint(j);
+    let q = node.rotationQuaternion ?? Quaternion.FromEulerVector(node.rotation);
+    for (const [axis, a] of rotations) q = q.multiply(Quaternion.RotationAxis(AXES[axis], a));
+    node.rotationQuaternion = q;
+  }
+}
+
 interface Rider {
   pivot: TransformNode;
   meshes: AbstractMesh[];
@@ -88,6 +116,15 @@ interface Rider {
   skeletons: Skeleton[];
   /** Helmet centre, moto-local. */
   head: Vector3;
+  /** End poses blended by setFootDown: index 0 = tuck, 1 = left foot down. */
+  legPose: {
+    joints: TransformNode[];
+    tuck: Quaternion[];
+    down: Quaternion[];
+    foot: TransformNode;
+    footPos: [Vector3, Vector3];
+    footRot: [Quaternion, Quaternion];
+  };
 }
 
 function spawnRider(scene: Scene, assets: Assets, root: TransformNode, name: string, look: RiderLook): Rider {
@@ -127,18 +164,37 @@ function spawnRider(scene: Scene, assets: Assets, root: TransformNode, name: str
   });
 
   // Racing tuck (before measuring, so orientation/placement use the final pose).
-  for (const [j, rotations] of Object.entries(TUCK)) {
-    const node = joint(j);
-    let q = node.rotationQuaternion ?? Quaternion.FromEulerVector(node.rotation);
-    for (const [axis, a] of rotations) q = q.multiply(Quaternion.RotationAxis(AXES[axis], a));
-    node.rotationQuaternion = q;
-  }
-  refresh(root);
-  for (const { foot, shin, rel } of feet) {
-    const target = rel.multiply(shin.getWorldMatrix()).multiply(Matrix.Invert((foot.parent as TransformNode).getWorldMatrix()));
-    foot.rotationQuaternion ??= new Quaternion();
-    target.decompose(foot.scaling, foot.rotationQuaternion, foot.position);
-  }
+  rotateJoints(joint, TUCK);
+  const attachFeet = (): void => {
+    refresh(root);
+    for (const { foot, shin, rel } of feet) {
+      const target = rel.multiply(shin.getWorldMatrix()).multiply(Matrix.Invert((foot.parent as TransformNode).getWorldMatrix()));
+      foot.rotationQuaternion ??= new Quaternion();
+      target.decompose(foot.scaling, foot.rotationQuaternion, foot.position);
+    }
+  };
+  attachFeet();
+
+  // Stopped pose (left foot on the ground): captured, then the tuck is restored for measuring.
+  const { "Foot.L": sole, ...leg } = FOOT_DOWN;
+  const legJoints = Object.keys(leg).map(joint);
+  const footL = joint("Foot.L");
+  const tuck = legJoints.map((n) => n.rotationQuaternion!.clone());
+  const tuckFoot = [footL.position.clone(), footL.rotationQuaternion!.clone()] as const;
+  rotateJoints(joint, leg);
+  attachFeet();
+  rotateJoints(joint, { "Foot.L": sole });
+  const legPose: Rider["legPose"] = {
+    joints: legJoints,
+    tuck,
+    down: legJoints.map((n) => n.rotationQuaternion!.clone()),
+    foot: footL,
+    footPos: [tuckFoot[0], footL.position.clone()],
+    footRot: [tuckFoot[1], footL.rotationQuaternion!.clone()],
+  };
+  legJoints.forEach((n, k) => n.rotationQuaternion!.copyFrom(tuck[k]));
+  footL.position.copyFrom(tuckFoot[0]);
+  footL.rotationQuaternion!.copyFrom(tuckFoot[1]);
 
   // Scale to rider height.
   pivot.scaling.setAll(RIDER_HEIGHT / standing);
@@ -166,7 +222,7 @@ function spawnRider(scene: Scene, assets: Assets, root: TransformNode, name: str
   const meshes = top.getChildMeshes(false);
   const materials = [...new Set(meshes.map((m) => m.material))].filter((m): m is StandardMaterial => m instanceof StandardMaterial);
   for (const m of meshes) m.isPickable = false;
-  return { pivot, meshes, materials, skeletons: entries.skeletons, head };
+  return { pivot, meshes, materials, skeletons: entries.skeletons, head, legPose };
 }
 
 function disposeRider(r: Rider): void {
@@ -232,6 +288,17 @@ export function createMoto(scene: Scene, assets: Assets, name: string, look: Rid
 
   let current: RiderLook | null = null;
   let rider: Rider | null = null;
+  /** Requested foot-down amount, and the one last posed on `rider` (NaN = not yet). */
+  let foot = 0;
+  let posedFoot = NaN;
+  const poseFoot = (): void => {
+    if (!rider || foot === posedFoot) return;
+    posedFoot = foot;
+    const p = rider.legPose;
+    for (let k = 0; k < p.joints.length; k++) Quaternion.SlerpToRef(p.tuck[k], p.down[k], foot, p.joints[k].rotationQuaternion!);
+    Vector3.LerpToRef(p.footPos[0], p.footPos[1], foot, p.foot.position);
+    Quaternion.SlerpToRef(p.footRot[0], p.footRot[1], foot, p.foot.rotationQuaternion!);
+  };
   let helmet: TransformNode | null = null;
   const moto: Moto = {
     root,
@@ -245,6 +312,7 @@ export function createMoto(scene: Scene, assets: Assets, name: string, look: Rid
         if (helmet) helmet.dispose(false, true);
         helmet = null;
         rider = spawnRider(scene, assets, root, name, look);
+        posedFoot = NaN;
       }
       const helmetChanged =
         current?.helmet !== look.helmet || current.helmetColor.some((v, i) => v !== look.helmetColor[i]);
@@ -259,6 +327,11 @@ export function createMoto(scene: Scene, assets: Assets, name: string, look: Rid
       paintRider(rider, look);
       moto.casters = [body, ...wheels, ...rider.meshes, ...helmet.getChildMeshes()];
       current = look;
+      poseFoot();
+    },
+    setFootDown(amount) {
+      foot = amount;
+      poseFoot();
     },
   };
   moto.setLook(look);

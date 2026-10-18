@@ -623,6 +623,12 @@ button {
   background: #fff;
 }
 
+#hud-controls .icon-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ---------- Countdown & banner ---------- */
 
 #countdown {
@@ -997,6 +1003,9 @@ button {
 
 #host-url {
   overflow-wrap: anywhere;
+  color: inherit;
+  font-weight: bold;
+  text-decoration: underline;
 }
 
 /* Overlaps the list's bottom (▼) or top (▲) edge; click scrolls one page.
