@@ -264,10 +264,12 @@ func TestHostGraceTimeout(t *testing.T) {
 		p.expect("started")
 		q.expect("started")
 		p.send(map[string]any{"t": "progress", "done": 5, "status": "racing", "elapsedMs": 5000})
-		q.close()
 		host.expect("player_joined")
 		host.expect("player_joined")
 		host.expect("progress")
+		// Close Bo only after Ann's progress reached the host: two connections' events have no
+		// relative order, and the replay below expects progress before Bo's player_left.
+		q.close()
 		host.expect("player_left")
 		host.close()
 		host.expectClosed()
