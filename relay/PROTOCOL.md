@@ -109,9 +109,11 @@ Configuration (env, flags override): `LISTEN` (`127.0.0.1:8010`), `ALLOWED_ORIGI
 - `GET /healthz` → `200 ok`.
 - `GET /stats?days=30` (`days` clamped to 1–60) with `Authorization: Bearer $STATS_TOKEN` → JSON:
   `{days, since, rooms, races, players: {sum, avg}, room_duration_s: {median, p90},
-  race_duration_s: {median, p90}, races_per_cup, races_per_n}` (`players` sums/averages the
-  `max_players` of each room; quantiles use the nearest-rank method). 404 when `STATS_TOKEN` is
-  empty, 401 when the token is missing or wrong. Reads `EVENTS_PATH` and `EVENTS_PATH.1`.
+  race_duration_s: {median, p90}, races_per_cup, races_per_n, live: {connections, rooms}}` (`players`
+  sums/averages the `max_players` of each room; quantiles use the nearest-rank method; `live` is the
+  state at request time, not from the events: open WebSocket connections and rooms in memory, so
+  0/0 means a restart drops nobody). 404 when `STATS_TOKEN` is empty, 401 when the token is missing
+  or wrong. Reads `EVENTS_PATH` and `EVENTS_PATH.1`.
 - Logs: JSON lines on stderr (room created/closed, joins with client IP from `CF-Connecting-IP`
   and User-Agent, errors). Player names are never logged.
 - Usage events, one JSON line each in `EVENTS_PATH` (no join code, no names):

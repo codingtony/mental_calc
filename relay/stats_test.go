@@ -99,6 +99,42 @@ func TestRoomClosedEventOnce(t *testing.T) {
 	}
 }
 
+// /stats reports the relay's live connections and rooms, and they drop again on disconnect.
+func TestStatsLive(t *testing.T) {
+	cfg := testConfig()
+	cfg.StatsToken = "s3cret"
+	r := startRelay(t, cfg)
+	live := func() liveStats {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, r.http.URL+"/stats", nil)
+		req.Header.Set("Authorization", "Bearer s3cret")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var st Stats
+		if err := json.NewDecoder(res.Body).Decode(&st); err != nil {
+			t.Fatal(err)
+		}
+		return st.Live
+	}
+
+	if got := live(); got != (liveStats{}) {
+		t.Fatalf("idle relay: %+v", got)
+	}
+	host, created := createRoom(t, r.url)
+	p, _ := joinRoom(t, r.url, created.str("code"), "Ann")
+	if got := live(); got != (liveStats{Connections: 2, Rooms: 1}) {
+		t.Fatalf("host + player: %+v", got)
+	}
+	p.close()
+	waitUntil(t, func() bool { return live().Connections == 1 })
+	host.close()
+	// The room stays during the host's reconnect grace; the connection is gone.
+	waitUntil(t, func() bool { return live() == liveStats{Connections: 0, Rooms: 1} })
+}
+
 func TestStatsAggregation(t *testing.T) {
 	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 	paths := []string{"testdata/events.jsonl", "testdata/events.jsonl.1", "testdata/missing.jsonl"}

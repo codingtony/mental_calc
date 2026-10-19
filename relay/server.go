@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -22,6 +23,7 @@ type Server struct {
 	hub    *Hub
 	events *EventLog
 	mux    *http.ServeMux
+	conns  atomic.Int64 // open WebSocket connections, reported live by /stats
 }
 
 func NewServer(cfg Config, logger *slog.Logger) *Server {
@@ -56,6 +58,8 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("ws_rejected", "err", err, "origin", r.Header.Get("Origin"), "ip", ip, "ua", ua)
 		return
 	}
+	s.conns.Add(1)
+	defer s.conns.Add(-1)
 	ws.SetReadLimit(maxMessageBytes)
 	// A host resume (handleResume) queues `created` plus up to player_joined +
 	// player_left + progress per player at once (181 messages at 60 players);

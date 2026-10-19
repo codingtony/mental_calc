@@ -18,7 +18,7 @@ type quantiles struct {
 	P90    float64 `json:"p90"`
 }
 
-// Stats summarises the usage events of the last Days days.
+// Stats summarises the usage events of the last Days days, plus the relay's live state.
 type Stats struct {
 	Days          int            `json:"days"`
 	Since         time.Time      `json:"since"`
@@ -29,6 +29,14 @@ type Stats struct {
 	RaceDurationS quantiles      `json:"race_duration_s"`
 	RacesPerCup   map[string]int `json:"races_per_cup"`
 	RacesPerN     map[string]int `json:"races_per_n"`
+	Live          liveStats      `json:"live"`
+}
+
+// liveStats is the relay's state when /stats is served (not from the event log): tells whether a
+// restart would drop anyone.
+type liveStats struct {
+	Connections int64 `json:"connections"` // open WebSocket connections (hosts and players)
+	Rooms       int   `json:"rooms"`       // rooms in memory, including those in their host grace
 }
 
 type playerTotals struct {
@@ -122,6 +130,7 @@ func (s *Server) serveStats(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, s.cfg.EventsPath, s.cfg.EventsPath+".1")
 	}
 	st := computeStats(paths, time.Now(), days)
+	st.Live = liveStats{Connections: s.conns.Load(), Rooms: s.hub.count()}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(st)
 }
