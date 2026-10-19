@@ -194,6 +194,14 @@ document.querySelectorAll<HTMLButtonElement>(".flag").forEach((b) =>
   }),
 );
 
+const aboutEl = el<HTMLDialogElement>("about");
+el("about-btn").addEventListener("click", () => aboutEl.showModal());
+// Esc and the Close button (form method="dialog") close it natively; a click on the backdrop
+// targets the dialog itself, outside its panel.
+aboutEl.addEventListener("click", (e) => {
+  if (e.target === aboutEl) aboutEl.close();
+});
+
 document.querySelectorAll<HTMLButtonElement>("[data-category]").forEach((b) =>
   b.addEventListener("click", () => {
     prefs.category = Number(b.dataset.category) as Category;

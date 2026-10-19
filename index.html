@@ -41,9 +41,34 @@
           <button class="choice" id="toggle-music"><span class="audio-icon"></span><span data-i18n="music"></span></button>
           <button class="choice" id="toggle-sound"><span class="audio-icon"></span><span data-i18n="sound"></span></button>
         </div>
-        <p class="credits">3D: <a href="https://poly.pizza/m/dse64pqMKAR" target="_blank" rel="noopener">Motorcycle</a> by Poly by Google (CC-BY 3.0) · Quaternius, Kenney (CC0)</p>
+        <p class="credits"><button id="about-btn" class="link-btn" data-i18n="about"></button></p>
       </div>
     </section>
+
+    <dialog id="about" aria-labelledby="about-title">
+      <div class="panel">
+        <h2 id="about-title" class="heading" data-i18n="about"></h2>
+        <p class="about-copyright"><span>Mental Calc GP</span> Copyright © 2026 Tony&nbsp;Bussières</p>
+        <p class="subtle">
+          <span data-i18n="aboutLicense"></span>
+          <a href="https://github.com/codingtony/mental_calc/blob/main/LICENSE" target="_blank" rel="noopener" data-i18n="mitLicense"></a>
+        </p>
+        <a class="github-link" href="https://github.com/codingtony/mental_calc" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
+          codingtony/mental_calc
+        </a>
+        <p class="field-label" data-i18n="models3d"></p>
+        <ul class="about-credits">
+          <li>
+            <a href="https://poly.pizza/m/dse64pqMKAR" target="_blank" rel="noopener">Motorcycle</a> · Poly&nbsp;by&nbsp;Google&nbsp;·
+            <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY&nbsp;3.0</a>
+          </li>
+          <li><span data-i18n="creditsQuaternius"></span> · <a href="https://poly.pizza/u/Quaternius" target="_blank" rel="noopener">Quaternius</a>&nbsp;·&nbsp;CC0</li>
+          <li><a href="https://kenney.nl/assets/racing-kit" target="_blank" rel="noopener">Racing&nbsp;Kit</a> · Kenney&nbsp;·&nbsp;CC0</li>
+        </ul>
+        <form method="dialog"><button class="secondary-btn" data-i18n="close" autofocus></button></form>
+      </div>
+    </dialog>
 
     <section id="screen-setup" class="screen hidden">
       <div class="panel">

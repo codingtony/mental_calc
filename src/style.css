@@ -47,9 +47,83 @@ body {
 }
 
 .credits {
-  font-size: 11px;
-  opacity: 0.6;
-  margin-top: 12px;
+  margin: 14px 0 0;
+  text-align: center;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+  text-decoration: underline;
+  opacity: 0.7;
+}
+
+.link-btn:hover {
+  opacity: 1;
+}
+
+/* About: native modal <dialog> (Esc, focus trap, backdrop); the inner .panel draws the card. */
+#about {
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 0 0 8px; /* room for the panel's drop shadow */
+  border: none;
+  background: none;
+  overflow: auto;
+}
+
+#about::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+#about .panel {
+  width: 100%;
+  max-height: none;
+  background: #fff;
+}
+
+#about a {
+  color: inherit;
+}
+
+.about-copyright {
+  margin: 6px 0;
+  font-size: 15px;
+  text-align: center;
+}
+
+.about-copyright span {
+  display: block;
+  font-size: 19px;
+}
+
+.github-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.github-link svg {
+  width: 24px;
+  height: 24px;
+}
+
+.about-credits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+#about .secondary-btn {
+  display: block;
+  width: 100%;
 }
 
 .hidden {
