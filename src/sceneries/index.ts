@@ -13,7 +13,7 @@ export const SCENERIES: readonly Scenery[] = [MEADOW, COAST, DESERT, CITY, FORES
 
 export const DEFAULT_SCENERY: Scenery = SCENERIES[0];
 
-/** Dev `?preview=<id>` circuits: every scenery (add dev-only references here). */
+/** `?preview=<id>` circuits: every scenery (add references that are not raced here). */
 export const PREVIEW_SCENERIES: readonly Scenery[] = SCENERIES;
 
 /** Untrusted id (relay settings, sessionStorage) → scenery; unknown or missing → DEFAULT_SCENERY. */
