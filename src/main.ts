@@ -3,6 +3,15 @@ import { Engine } from "@babylonjs/core";
 import QRCode from "qrcode";
 import { GameAudio } from "./audio";
 import {
+  afterRace,
+  championshipRace,
+  newRun,
+  runComplete,
+  toRecord,
+  WIN_PACE,
+  type ChampionshipRun,
+} from "./championship";
+import {
   CUPS,
   DIFFICULTIES,
   LIVES,
@@ -14,24 +23,39 @@ import {
   type Difficulty,
 } from "./config";
 import { fmtTime, mpErrorText, ordinal, pick, setLang, t, type Lang } from "./i18n";
-import { DEFAULT_PLAYER_LOOK, parseLook, rgbCss, type RiderLook } from "./look";
+import { DEFAULT_PLAYER_LOOK, parseLook, randomBikeLook, rgbCss, type RiderLook } from "./look";
 import type { RankInfo, TopRow } from "./net/protocol";
 import { COUNTDOWN_MS, HostRoom, PlayerRoom, type HostListener, type PlayerListener, type RaceStart } from "./net/room";
 import { displayStatus, TOP_N } from "./net/standings";
 import { defaultQuestionConfig, generateQuestionBank, pickQuestions } from "./questions";
 import { RaceSession } from "./race";
 import { mulberry32, randomSeed } from "./rng";
+import { DEFAULT_SCENERY, PREVIEW_SCENERIES, SCENERIES, sceneryById } from "./sceneries";
+import type { Scenery } from "./sceneries/types";
 import { MENU_SONG } from "./songs";
-import { addGame, computeScore, cupById, loadPrefs, parseAudioParam, savePrefs, type AudioPrefs } from "./storage";
+import {
+  addGame,
+  computeScore,
+  cupById,
+  loadPrefs,
+  parseAudioParam,
+  saveChampionshipRecord,
+  savePrefs,
+  type AudioPrefs,
+  type SoloMode,
+} from "./storage";
 import {
   attachScrollHint,
   el,
   formatQuestion,
+  moveTrackMapDot,
   renderAudioToggles,
   renderBoard,
+  renderChampionshipBoard,
   renderCups,
   renderHostPlayers,
   renderHostSettings,
+  renderSceneryOptions,
   renderIntroTitle,
   renderLanes,
   renderMenu,
@@ -41,14 +65,16 @@ import {
   renderResults,
   renderSetup,
   renderStandings,
+  renderTrackMap,
   restartAnimation,
+  sceneryName,
   showOnly,
   type BoardKind,
   type MpStandingRow,
   type StandingEntry,
 } from "./ui";
 import { probeFps, qualityDrop } from "./quality";
-import { QUALITY, World } from "./world";
+import { QUALITY, World, type RaceFrame } from "./world";
 
 declare global {
   interface Window {
@@ -57,12 +83,14 @@ declare global {
   }
 }
 
-type Screen = "intro" | "menu" | "setup" | "cups" | "race" | "results" | "join" | "wait" | "host";
+type Screen = "intro" | "menu" | "setup" | "cups" | "race" | "results" | "join" | "wait" | "host" | "preview" | "champion";
 
 const INTRO_MS = 4500;
 const COUNTDOWN_STEP_MS = 1000;
 const FINISH_TO_RESULTS_MS = 3000;
 const CRASH_TO_RESULTS_MS = 2500;
+/** Championship won: trophy and fanfare before the results (a click or key skips). */
+const TROPHY_MS = 6000;
 const ROOM_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
 const PROD_JOIN_URL = "https://maths.codingtony.com/";
 /** Rival motos in multiplayer: the other players of the top 5. */
@@ -78,7 +106,10 @@ const playerLook = prefs.look ?? DEFAULT_PLAYER_LOOK;
 const canvas = el<HTMLCanvasElement>("renderCanvas");
 const engine = new Engine(canvas, true, { stencil: false });
 engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio, 2));
-const world = await World.create(engine, playerLook).catch((err: unknown) => {
+// Dev `?preview=<id>`: one lap of that circuit from the player's view (see startPreview).
+const previewParam = import.meta.env.DEV ? new URLSearchParams(location.search).get("preview") : null;
+const previewScenery = PREVIEW_SCENERIES.find((s) => s.id === previewParam) ?? null;
+const world = await World.create(engine, playerLook, previewScenery ?? DEFAULT_SCENERY).catch((err: unknown) => {
   el("boot").textContent = t("loadFailed");
   throw err;
 });
@@ -90,6 +121,7 @@ audio.setSound(audioState.sound);
 
 const answerEl = el<HTMLInputElement>("answer");
 const nameEl = el<HTMLInputElement>("name");
+const hostSceneryEl = el<HTMLSelectElement>("host-scenery");
 const joinCodeEl = el<HTMLInputElement>("join-code");
 const joinNameEl = el<HTMLInputElement>("join-name");
 const showAllEl = el<HTMLInputElement>("host-showall");
@@ -107,6 +139,10 @@ let laps = 1;
 let timers: number[] = [];
 let board: BoardKind = "last";
 let freshTimestamp = 0;
+/** What the current/last race was; picks the results screen. */
+let raceKind: "single" | "championship" | "mp" = "single";
+/** Championship in progress; in memory only (a reload starts over at race 1). */
+let champRun: ChampionshipRun | null = null;
 // HUD values last written, so the DOM is only touched on change.
 let hudPosition = 0;
 let hudText = "";
@@ -218,6 +254,14 @@ document.querySelectorAll<HTMLButtonElement>("[data-difficulty]").forEach((b) =>
   }),
 );
 
+document.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach((b) =>
+  b.addEventListener("click", () => {
+    prefs.soloMode = b.dataset.mode as SoloMode;
+    savePrefs(prefs);
+    renderSetup(prefs);
+  }),
+);
+
 function toggleMusic(): void {
   audioState.music = !audioState.music;
   audio.setMusic(audioState.music);
@@ -274,22 +318,31 @@ function showCups(): void {
   showOnly("screen-cups");
   world.setMode("menu", performance.now());
   audio.setSong(MENU_SONG);
-  renderCups(prefs);
+  renderCups(prefs, champRun);
+}
+
+/** Championship: the same cup continues an unfinished run; another cup or a finished run starts a new one. */
+function pickCup(selected: Cup): void {
+  if (prefs.soloMode === "championship" && (!champRun || champRun.cup !== selected.id || runComplete(champRun))) {
+    champRun = newRun(selected.id, Date.now());
+  }
+  startRace(selected);
 }
 
 document.querySelectorAll<HTMLButtonElement>("[data-cup]").forEach((b) =>
-  b.addEventListener("click", () => startRace(CUPS.find((c) => c.id === b.dataset.cup)!)),
+  b.addEventListener("click", () => pickCup(CUPS.find((c) => c.id === b.dataset.cup)!)),
 );
 el("cups-back").addEventListener("click", showSetup);
 
 // ---------- Race ----------
 
-/** Lights 3-2-1 over `totalMs`, then GO. */
-function runCountdown(totalMs: number, hint: boolean, onGo: () => void): void {
+/** Lights 3-2-1 over `totalMs`, then GO; `hint` shows under the lights (null = none). */
+function runCountdown(totalMs: number, hint: string | null, onGo: () => void): void {
   const step = totalMs / 3;
   const lights = el("countdown").querySelectorAll("span");
   lights.forEach((l) => (l.className = ""));
-  el("countdown-hint").classList.toggle("hidden", !hint);
+  el("countdown-hint").textContent = hint ?? "";
+  el("countdown-hint").classList.toggle("hidden", hint === null);
   const countdownText = el("countdown-text");
   countdownText.textContent = "";
   ["3", "2", "1"].forEach((label, i) =>
@@ -315,15 +368,23 @@ function runCountdown(totalMs: number, hint: boolean, onGo: () => void): void {
 function startRace(selected: Cup, mp: RaceStart | null = null): void {
   clearTimers();
   cup = selected;
-  raceConfig = mp
-    ? { category: mp.settings.n, difficulty: mp.settings.difficulty }
-    : { category: prefs.category, difficulty: prefs.difficulty };
-  const timePerQuestion = DIFFICULTIES[raceConfig.difficulty];
+  raceKind = mp ? "mp" : prefs.soloMode;
+  const champ = raceKind === "championship" ? championshipRace(champRun!.won) : null;
+  if (!champ) {
+    raceConfig = mp
+      ? { category: mp.settings.n, difficulty: mp.settings.difficulty }
+      : { category: prefs.category, difficulty: prefs.difficulty };
+  }
+  const timePerQuestion = champ ? champ.secondsPerQuestion : DIFFICULTIES[raceConfig.difficulty];
   const bank = generateQuestionBank({ ...defaultQuestionConfig, mode: cup.mode });
-  const questions = pickQuestions(bank, raceConfig.category, mulberry32(mp ? mp.seed : randomSeed()));
+  const questions = pickQuestions(bank, champ ? champ.questions : raceConfig.category, mulberry32(mp ? mp.seed : randomSeed()));
   session = new RaceSession(questions, timePerQuestion, mp ? [] : RIVALS);
+  const scenery = mp ? sceneryById(mp.settings.scenery) : champ ? champ.scenery : DEFAULT_SCENERY;
+  world.setScenery(scenery);
   // Multiplayer motos appear once the first standings tell who is in the top 5.
   world.setRivalSlots(mp ? [] : null);
+  // Class races show the bike colour this kid got at joining; solo races the saved look.
+  world.setPlayerLook(mp && player ? player.look : playerLook);
   motoSlots = [];
   mpResult = null;
 
@@ -355,15 +416,19 @@ function startRace(selected: Cup, mp: RaceStart | null = null): void {
   el("hud").classList.toggle("mp", mp !== null);
   answerEl.value = "";
   answerEl.disabled = true;
-  el("goal-time").textContent = t("goal", { t: fmtTime(session.goalMs) });
+  el("race-name").textContent = champ
+    ? `${t("champRaceOf", { k: champRun!.won + 1, n: SCENERIES.length })} · ${sceneryName(scenery)}`
+    : sceneryName(scenery);
+  // Championship: the goal is the time that beats the fastest rival (1st place).
+  el("goal-time").textContent = t("goal", { t: fmtTime(champ ? session.goalMs * WIN_PACE : session.goalMs) });
   updateHud(performance.now());
 
-  runCountdown(mp ? mp.countdownMs : 3 * COUNTDOWN_STEP_MS, !mp, () => {
+  runCountdown(mp ? mp.countdownMs : 3 * COUNTDOWN_STEP_MS, mp ? null : t(champ ? "champHint" : "targetHint"), () => {
     session!.start(performance.now());
     answerEl.disabled = false;
     answerEl.focus();
     showQuestion();
-    audio.setSong(world.theme.raceSong);
+    audio.setSong(scenery.raceSong);
   });
 }
 
@@ -433,7 +498,12 @@ function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number):
   const elapsedMs = s.elapsedMs(now);
   const crashed = s.status === "crashed";
   if (player) mpResult = mpResultOf(s, elapsedMs);
-  else {
+  else if (raceKind === "championship") {
+    // Championship races stay off the single-race boards; a win saves (or updates) the run's record.
+    const first = s.finalPosition() === 1;
+    champRun = afterRace(champRun!, first, elapsedMs);
+    if (first) saveChampionshipRecord(toRecord(champRun, prefs.name, Date.now()));
+  } else {
     freshTimestamp = Date.now();
     addGame({
       name: prefs.name,
@@ -451,7 +521,9 @@ function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number):
       timestamp: freshTimestamp,
     });
   }
-  later(resultsDelayMs, () => showResults(s, elapsedMs));
+  // The last championship race won: trophy and fanfare first.
+  const champion = !player && raceKind === "championship" && runComplete(champRun!);
+  later(resultsDelayMs, () => (champion ? celebrateChampion(() => showResults(s, elapsedMs)) : showResults(s, elapsedMs)));
 }
 
 /** Multiplayer games never touch the local high scores: the kid's result lives only here. */
@@ -570,6 +642,7 @@ function updateMpStandings(s: RaceSession): void {
     }
     hudPosition = me.rank;
   }
+  const meColor = rgbCss(player!.look.bike);
   const rows: MpStandingRow[] = top.map((r, i) => {
     const slot = motoSlots.find((k) => k.name === r.name);
     return {
@@ -577,10 +650,10 @@ function updateMpStandings(s: RaceSession): void {
       name: r.name,
       status: r.status,
       me: i + 1 === me.rank,
-      color: i + 1 === me.rank ? PLAYER_CSS : slot ? rgbCss(slot.look.bike) : "#999",
+      color: i + 1 === me.rank ? meColor : slot ? rgbCss(slot.look.bike) : "#999",
     };
   });
-  if (me.rank > top.length) rows.push({ rank: me.rank, name: player!.name, status: me.status, me: true, color: PLAYER_CSS });
+  if (me.rank > top.length) rows.push({ rank: me.rank, name: player!.name, status: me.status, me: true, color: meColor });
   standingsKey = renderMpStandings(rows, standingsKey);
 }
 
@@ -613,24 +686,75 @@ function assignMotoSlots(top: TopRow[], me: RankInfo): void {
 
 // ---------- Results ----------
 
+/** Championship won: the gold trophy drops in and spins over the circuit to the victory fanfare, then `then`. */
+function celebrateChampion(then: () => void): void {
+  clearTimers();
+  screen = "champion";
+  el("trophy-title").textContent = t("champChampion");
+  showOnly("trophy-title");
+  world.setRivalSlots(null);
+  world.setMode("trophy", performance.now());
+  // Plays on into the results, then the menu song.
+  audio.playJingle("victoryFanfare", MENU_SONG);
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    document.removeEventListener("click", finish);
+    document.removeEventListener("keydown", finish);
+    then();
+  };
+  later(TROPHY_MS, finish);
+  // "click", not "pointerdown": the results must not appear under a press and catch its release.
+  document.addEventListener("click", finish);
+  document.addEventListener("keydown", finish);
+}
+
 function showResults(s: RaceSession | null, elapsedMs: number): void {
   clearTimers();
   screen = "results";
   showOnly("screen-results");
   world.setMode("menu", performance.now());
-  // Kids who drove get a jingle: solo = goal met, class race = reached the finish line.
-  if (s) audio.playJingle((player ? s.status === "finished" : s.won()) ? "jingleWin" : "jingleLose", MENU_SONG);
-  else audio.setSong(MENU_SONG);
-  world.setRivalSlots(null);
   const mp = player !== null;
+  const champ = s !== null && !mp && raceKind === "championship";
+  const first = champ && s.finalPosition() === 1;
+  const complete = champ && runComplete(champRun!);
+  // Kids who drove get a jingle: solo = goal met (championship: 1st place), class race = reached the finish line.
+  // A won championship keeps the victory fanfare from celebrateChampion.
+  if (s && !(first && complete)) {
+    audio.playJingle((mp ? s.status === "finished" : champ ? first : s.won()) ? "jingleWin" : "jingleLose", MENU_SONG);
+  } else if (!s) audio.setSong(MENU_SONG);
+  world.setRivalSlots(null);
   // Multiplayer games never touch the local high scores: no board, no solo buttons.
-  document.querySelector(".tabs")!.classList.toggle("hidden", mp);
+  document.querySelector(".tabs")!.classList.toggle("hidden", mp || champ);
+  el("champ-board-title").classList.toggle("hidden", !champ);
   el("board-box").classList.toggle("hidden", mp);
-  for (const id of ["again-btn", "cups-btn", "menu-btn"]) el(id).classList.toggle("hidden", mp);
+  for (const id of ["cups-btn", "menu-btn"]) el(id).classList.toggle("hidden", mp);
+  el("again-btn").classList.toggle("hidden", mp || first);
+  el("champ-next-btn").classList.toggle("hidden", !first || complete);
   el("mp-leave-btn").classList.toggle("hidden", !mp);
   el("mp-podium").classList.toggle("hidden", !mp);
   el("result-stats").classList.remove("hidden");
-  if (s && !mp) {
+  if (s && champ) {
+    const n = SCENERIES.length;
+    const title = first
+      ? complete
+        ? t("champChampion")
+        : t("champWon", { k: champRun!.won, n })
+      : t(s.status === "crashed" ? "resultCrashed" : "champLost");
+    renderResults({
+      title,
+      position: s.finalPosition(),
+      of: 8,
+      elapsedMs,
+      goalMs: s.goalMs * WIN_PACE,
+      errors: s.errors,
+      answered: s.answered,
+      numQuestions: s.numQuestions,
+      score: null,
+    });
+    renderChampionshipBoard(cup.id, champRun!.startedAt);
+  } else if (s && !mp) {
     renderResults({
       title: t(s.won() ? "resultWon" : s.status === "crashed" ? "resultCrashed" : "resultLost"),
       position: s.finalPosition(),
@@ -683,6 +807,8 @@ document.querySelectorAll<HTMLButtonElement>(".tab").forEach((b) =>
   }),
 );
 el("again-btn").addEventListener("click", () => startRace(cup));
+// champRun.won already points at the next race.
+el("champ-next-btn").addEventListener("click", () => startRace(cup));
 el("cups-btn").addEventListener("click", showCups);
 el("menu-btn").addEventListener("click", showMenu);
 el("mp-leave-btn").addEventListener("click", leavePlayerRoom);
@@ -770,7 +896,8 @@ function submitJoin(): void {
   }
   prefs.name = name;
   savePrefs(prefs);
-  player = new PlayerRoom(code, name, prefs.look, playerListener);
+  // Every join gets a random bike colour from BIKE_PALETTE (choosing one comes later).
+  player = new PlayerRoom(code, name, randomBikeLook(playerLook), playerListener);
   showWait();
 }
 
@@ -828,7 +955,10 @@ const hostListener: HostListener = {
 };
 
 function openHostRoom(): void {
-  host = new HostRoom({ cup: cup.id, n: prefs.category, difficulty: prefs.difficulty }, hostListener);
+  host = new HostRoom(
+    { cup: cup.id, n: prefs.category, difficulty: prefs.difficulty, scenery: DEFAULT_SCENERY.id },
+    hostListener,
+  );
   showHost();
 }
 
@@ -841,6 +971,8 @@ function showHost(): void {
   showOnly("screen-host");
   world.setMode("menu", performance.now());
   audio.setSong(MENU_SONG);
+  // Once per visit, not per renderHost: a joining kid must not close an open dropdown.
+  renderSceneryOptions(hostSceneryEl);
   renderHost();
 }
 
@@ -919,7 +1051,7 @@ el("host-start").addEventListener("click", () => {
   if (!host?.joinable) return;
   host.start();
   showOnly("screen-host", "countdown");
-  runCountdown(COUNTDOWN_MS, false, () => {});
+  runCountdown(COUNTDOWN_MS, null, () => {});
 });
 el("host-end").addEventListener("click", () => host?.end());
 el("host-rematch").addEventListener("click", () => host?.rematch());
@@ -942,6 +1074,9 @@ document.querySelectorAll<HTMLButtonElement>("[data-host-difficulty]").forEach((
     host?.setSettings({ ...host.settings, difficulty: b.dataset.hostDifficulty as Difficulty }),
   ),
 );
+hostSceneryEl.addEventListener("change", () => {
+  host?.setSettings({ ...host.settings, scenery: sceneryById(hostSceneryEl.value).id });
+});
 
 // ---------- Render loop ----------
 
@@ -952,21 +1087,59 @@ function mpRivalProgress(dt: number): number[] {
   return motoSlots.map((slot) => slot.shown);
 }
 
+// ---------- Dev preview (?preview=<id>) ----------
+
+/** `document.body.dataset.preview` tells automation where it is: ready → running → done (or unknown). */
+let preview: { phase: "ready" | "lap" | "finish"; startMs: number } | null = null;
+
+/** The player rides one lap alone at TARGET_SPEED after the first click or key; a minimap shows where. */
+function startPreview(scenery: Scenery): void {
+  screen = "preview";
+  showOnly();
+  world.setRivalSlots([]);
+  world.setupRace(world.track.length);
+  world.setMode("race", performance.now());
+  renderTrackMap(el("track-map"), world.track);
+  preview = { phase: "ready", startMs: 0 };
+  document.body.dataset.preview = "ready";
+  const go = () => {
+    if (preview?.phase !== "ready") return;
+    preview = { phase: "lap", startMs: performance.now() };
+    document.body.dataset.preview = "running";
+    audio.setSong(scenery.raceSong);
+  };
+  document.addEventListener("pointerdown", go, { once: true });
+  document.addEventListener("keydown", go, { once: true });
+}
+
+/**
+ * Preview frame: the lap's distance as race progress (perQuestion = 1 m). Past the line the rider
+ * keeps going in the chase view (no finish orbit: the video stays the player's view).
+ */
+function previewFrame(now: number): RaceFrame {
+  const p = preview!;
+  const d = p.phase === "ready" ? 0 : ((now - p.startMs) / 1000) * TARGET_SPEED;
+  if (p.phase === "lap" && d >= world.track.length) {
+    p.phase = "finish";
+    later(FINISH_TO_RESULTS_MS, () => (document.body.dataset.preview = "done"));
+  }
+  return { player: d, rivals: [], perQuestion: 1 };
+}
+
 engine.runRenderLoop(() => {
   const now = performance.now();
   const dt = engine.getDeltaTime() / 1000;
   const racing = screen === "race" && session !== null;
-  world.update(
-    dt,
-    now,
-    racing
-      ? {
-          player: session!.playerProgress(now),
-          rivals: player ? mpRivalProgress(dt) : RIVALS.map((_, i) => session!.rivalProgress(i, now)),
-          perQuestion,
-        }
-      : null,
-  );
+  let frame: RaceFrame | null = null;
+  if (racing) {
+    frame = {
+      player: session!.playerProgress(now),
+      rivals: player ? mpRivalProgress(dt) : RIVALS.map((_, i) => session!.rivalProgress(i, now)),
+      perQuestion,
+    };
+  } else if (screen === "preview" && preview) frame = previewFrame(now);
+  world.update(dt, now, frame);
+  if (screen === "preview") moveTrackMapDot(el("track-map"), world.track.positionAt(world.playerDistance(), 0).pos);
   if (racing) {
     updateHud(now);
     if (session!.status === "running" && dt > 0) {
@@ -1013,6 +1186,7 @@ if (import.meta.env.DEV) {
     fail: () => submitAnswer("99999"),
     host: () => host,
     player: () => player,
+    world,
   };
 }
 
@@ -1020,11 +1194,20 @@ if (import.meta.env.DEV) {
 renderAudioToggles(audioState);
 // A reload resumes this tab's room (host or player); `?room=CODE` (QR code) opens the join screen.
 const roomParam = new URLSearchParams(location.search).get("room")?.trim().toUpperCase() || null;
-host = HostRoom.resume(hostListener);
-if (host) showHost();
-else {
-  player = PlayerRoom.resume(playerListener, roomParam, prefs.look);
-  if (player) showWait();
-  else if (roomParam) showJoin(roomParam);
-  else showIntro();
+if (previewParam !== null) {
+  if (previewScenery) startPreview(previewScenery);
+  else {
+    document.body.dataset.preview = "unknown";
+    console.error(`[preview] unknown scenery "${previewParam}"`);
+    showIntro();
+  }
+} else {
+  host = HostRoom.resume(hostListener);
+  if (host) showHost();
+  else {
+    player = PlayerRoom.resume(playerListener, roomParam, randomBikeLook(playerLook));
+    if (player) showWait();
+    else if (roomParam) showJoin(roomParam);
+    else showIntro();
+  }
 }

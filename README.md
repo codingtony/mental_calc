@@ -8,9 +8,9 @@ Vite + TypeScript + Babylon.js; the motos, riders and circuit props are free glT
 ## How it plays
 
 1. Intro animation (about 4.5 s; tap or press a key to skip).
-2. Setup: driver name, number of questions (10 / 30 / 50 / 120), difficulty
-   (Easy 10 s, Medium 5 s, Hard 3 s per question), music and sound on/off (both off by default), language
-   (Swedish by default, English, French; pick with the flags).
+2. Setup: driver name, mode (**Single race** or **Championship**); for a single race also the number of
+   questions (10 / 30 / 50 / 120) and difficulty (Easy 10 s, Medium 5 s, Hard 3 s per question). Music and
+   sound on/off (both off by default), language (Swedish by default, English, French; pick with the flags).
 3. Choose a cup: Plus (+), Plus-Minus (+ −), Times (×), Times-Divide (× ÷) or Star (all four).
 4. Race against 7 rivals. Each rival keeps a fixed pace relative to the goal time
    (questions × seconds per question). "Max Plus" drives exactly at goal pace, so
@@ -21,13 +21,30 @@ Vite + TypeScript + Babylon.js; the motos, riders and circuit props are free glT
 5. Results: position, time, goal and errors, plus "Last races" and "High scores"
    (high scores are per question count, cup and difficulty; crashed races are excluded).
 
+Single races always run on the first circuit (Ängsbanan), so their high scores stay comparable.
+
+### Championship
+
+One race per circuit, in the order of `SCENERIES` (`src/sceneries/index.ts`); you pick the cup. The 8 circuits:
+Ängsbanan (meadow), Kustbanan (coast at sunset), Ökenbanan (desert with a red-rock canyon), Stadsbanan (city),
+Skogsbanan (forest with rivers and a lake), Bergsbanan (figure 8 with a bridge and a tunnel), Isvärlden (ice world)
+and Nattbanan (night, lit by street lamps); each has its own race song.
+Race 1 is 25 questions × 6 s; each next race adds 5 questions and takes 1 s off per question
+(never below 2 s; `src/championship.ts`). Only **1st place** unlocks the next race; anything else
+retries the same race, as often as needed. The goal shown is the time that beats the fastest rival.
+Progress lives in memory only: picking the same cup again continues the run, another cup or a reload
+starts over at race 1. Championship records (best first: races won, then total time of the won races)
+are kept per cup in `mcgp.championship`; championship races never appear in "Last races" or "High scores".
+
 Questions come from the v1 engine (`src/questions.ts`, ported from `1/game.js`) with v1's default operand ranges.
 
 ## Class race (multiplayer)
 
 Up to 30 kids race each other on the same questions through a small WebSocket relay
 (`relay/`, protocol in `relay/PROTOCOL.md`). Nothing is stored: multiplayer races never
-appear in "Last races" or "High scores".
+appear in "Last races" or "High scores". Each kid gets a random bike colour (`BIKE_PALETTE` in `src/look.ts`,
+16 colours) when joining; it travels as the join `look`, so the teacher's lanes and the other kids' motos
+show it, and a reloaded tab keeps it.
 
 ### Teacher guide
 
@@ -35,7 +52,7 @@ appear in "Last races" or "High scores".
    A 5-character code and a QR code appear.
 2. **Share the code**: kids scan the QR code (it opens the game with the code filled in) or press
    **Join a race** and type the code, then their name. Their names show up in your list; ✕ removes one.
-3. **Start**: pick the cup, number of questions and difficulty, then **Start the race**. Every kid
+3. **Start**: pick the circuit, cup, number of questions and difficulty, then **Start the race**. Every kid
    gets the same questions. Wrong answers work as in solo: retry, and the 3rd one crashes the moto.
    Your screen shows the lanes of the top 5; tick **Show all players** to see everyone.
    The race ends by itself when everyone has finished or crashed, or when you press **End the race**.
@@ -73,8 +90,9 @@ that page load only and is never saved: `0` = silent, `1` = sound effects only, 
 
 ## Storage
 
-localStorage keys `mcgp.prefs` (name, language, last settings, audio toggles) and `mcgp.games`
-(the last 200 races). The first visit prefills the name from v1's `name` key; v1's own keys are never written.
+localStorage keys `mcgp.prefs` (name, language, last settings, solo mode, audio toggles), `mcgp.games`
+(the last 200 races) and `mcgp.championship` (championship records). The first visit prefills the name
+from v1's `name` key; v1's own keys are never written.
 sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `mcgp.mp.player`
 (room code, player token) let a reloaded tab rejoin its class race.
 
@@ -84,12 +102,16 @@ sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `m
 | - | - |
 | `src/config.ts` | Categories, difficulties, cups, rivals and their paces |
 | `src/race.ts` | Race rules (progress, positions, errors, finish/crash), no rendering |
-| `src/world.ts`, `src/track.ts`, `src/moto.ts`, `src/helmet.ts` | Babylon scene, circuit, motos/riders, cameras and effects |
+| `src/world.ts`, `src/track.ts`, `src/moto.ts`, `src/helmet.ts` | Babylon scene (rebuilt per circuit by `World.setScenery`, with day / sunset / night lighting), circuit with bridges, tunnels, rock arches and street lamps, motos/riders, cameras and effects |
+| `src/dressing.ts` | Procedural buildings (lit windows at night) and drawn props of a circuit |
+| `src/sceneries/` | One file per circuit (control points, heights, bridges, tunnels, mountains, water, canyons, props, buildings, colours, lighting, race song); `index.ts` = championship and dropdown order; `showcase.ts` (Bergsbanan) uses heights, a bridge and a tunnel |
+| `src/centerline.ts`, `src/terrain.ts` | Spline sampling of a circuit and the ground height field (road heights, mountains, water beds and banks, canyons) |
+| `src/championship.ts` | Championship rules: per-race difficulty, run progress, record ranking |
 | `src/assets.ts`, `src/assets/models/` | glTF loading, prefabs (thin instances), moto template; models + `CREDITS.md` |
-| `src/look.ts`, `src/theme.ts` | Rider look (bike/suit/helmet, sent to multiplayer rooms) and scenery theme data |
+| `src/look.ts` | Rider look (bike/suit/helmet, sent to multiplayer rooms) |
 | `src/quality.ts` | Load-time frame-rate probe that lowers graphics quality on slow devices |
 | `src/audio.ts` | `GameAudio`: master bus, song playback (menu, per-circuit race song, results jingles), sound effects, motorbike engine with gears |
-| `src/music.ts`, `src/songs.ts` | Song notation compiler and the composed songs (`SONGS`); a circuit's `SceneryTheme.raceSong` picks its race music |
+| `src/music.ts`, `src/songs.ts` | Song notation compiler and the composed songs (`SONGS`); a circuit's `raceSong` picks its race music |
 | `src/synth.ts` | WebAudio instrument voices, per-song mixer (reverb, delay) and noise/envelope helpers |
 | `src/storage.ts`, `src/i18n.ts`, `src/ui.ts` | Persistence, translations, DOM rendering |
 | `src/rng.ts` | Seeded PRNG (`mulberry32`): same seed → same questions on every device |
@@ -99,7 +121,10 @@ sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `m
 | `src/net/room.ts` | Host room (authoritative standings) and player room state |
 | `src/main.ts` | Screen state machine and render loop |
 
-In dev mode, `window.__mc` exposes `session()`, `solve()`, `fail()`, `host()` and `player()` for console testing.
+In dev mode, `window.__mc` exposes `session()`, `solve()`, `fail()`, `host()`, `player()` and `world` for console testing.
+`?preview=<circuit id>` (dev only) rides one lap of that circuit alone from the player's view, with a minimap;
+`document.body.dataset.preview` goes `ready` → (click or key) `running` → `done` (`unknown` for a wrong id).
+Adding a circuit: see `.omp/skills/mc-scenery-add/SKILL.md`.
 
 ## Dev
 

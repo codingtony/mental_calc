@@ -2,11 +2,14 @@
 // change both together. Every message is a JSON object with a `t` field.
 import type { Category, CupId, Difficulty } from "../config";
 import type { RiderLook } from "../look";
+import type { SceneryId } from "../sceneries/types";
 
 export interface RoomSettings {
   cup: CupId;
   n: Category;
   difficulty: Difficulty;
+  /** Circuit; untrusted from the relay: resolve with sceneryById. */
+  scenery: SceneryId;
 }
 
 /** Status a player reports about itself. */

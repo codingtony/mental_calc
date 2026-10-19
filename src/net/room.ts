@@ -1,5 +1,6 @@
 import { parseLook, type RiderLook } from "../look";
 import { randomSeed } from "../rng";
+import { sceneryById } from "../sceneries";
 import { clearSession, Connection, loadSession, relayUrl, saveSession } from "./connection";
 import { CLOSE_KICKED, CLOSE_REPLACED } from "./protocol";
 import type {
@@ -77,7 +78,8 @@ export class HostRoom {
     if (snapshot) {
       this.code = snapshot.code;
       this.hostToken = snapshot.hostToken;
-      this.settings = snapshot.settings;
+      // Snapshots from before circuits existed lack `scenery`.
+      this.settings = { ...snapshot.settings, scenery: sceneryById(snapshot.settings.scenery).id };
       this.phase = snapshot.phase;
       this.seed = snapshot.seed;
       this.goAt = snapshot.goAt;
@@ -281,6 +283,8 @@ interface PlayerSession {
   name: string;
   playerId: string;
   playerToken: string;
+  /** The look sent at the first join, so a reloaded tab keeps its bike colour. */
+  look?: unknown;
 }
 
 export interface RaceStart {
@@ -322,7 +326,8 @@ export class PlayerRoom {
   constructor(
     readonly code: string,
     readonly name: string,
-    private readonly look: RiderLook | null,
+    /** Sent with every join; the relay keeps the first one for the seat. */
+    readonly look: RiderLook,
     private readonly listener: PlayerListener,
     session: PlayerSession | null = null,
   ) {
@@ -338,7 +343,7 @@ export class PlayerRoom {
           code,
           name,
           ...(this.playerToken ? { playerToken: this.playerToken } : {}),
-          ...(this.look ? { look: this.look } : {}),
+          look: this.look,
         });
         this.listener.onConnection(true);
       },
@@ -352,11 +357,11 @@ export class PlayerRoom {
     });
   }
 
-  /** Rejoins the room of this tab after a reload (same seat), if any; `code` must match when given. */
-  static resume(listener: PlayerListener, code: string | null, look: RiderLook | null): PlayerRoom | null {
+  /** Rejoins the room of this tab after a reload (same seat and look), if any; `code` must match when given. */
+  static resume(listener: PlayerListener, code: string | null, look: RiderLook): PlayerRoom | null {
     const s = loadSession<PlayerSession>("player");
     if (!s?.playerToken || (code !== null && code !== s.code)) return null;
-    return new PlayerRoom(s.code, s.name, look, listener, s);
+    return new PlayerRoom(s.code, s.name, parseLook(s.look) ?? look, listener, s);
   }
 
   sendProgress(done: number, status: ReportedStatus, elapsedMs: number): void {
@@ -376,7 +381,13 @@ export class PlayerRoom {
         this.playerId = msg.playerId;
         this.playerToken = msg.playerToken;
         this.settings = msg.settings;
-        const session: PlayerSession = { code: this.code, name: this.name, playerId: msg.playerId, playerToken: msg.playerToken };
+        const session: PlayerSession = {
+          code: this.code,
+          name: this.name,
+          playerId: msg.playerId,
+          playerToken: msg.playerToken,
+          look: this.look,
+        };
         saveSession("player", session);
         // A reload mid-race rejoins as a spectator of the running/ended race.
         if (this.phase === "joining") this.phase = msg.phase ?? "lobby";

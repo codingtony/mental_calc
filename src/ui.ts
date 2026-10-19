@@ -1,7 +1,21 @@
+import { runComplete, type ChampionshipRecord, type ChampionshipRun } from "./championship";
 import { CUPS, DIFFICULTIES, type Category, type CupId, type Difficulty } from "./config";
 import { fmtDate, fmtTime, getLang, ordinal, t } from "./i18n";
 import type { PlayerStatus, RoomSettings, TopRow } from "./net/protocol";
-import { bestFor, cupById, highScores, lastGames, type AudioPrefs, type GameRecord, type Prefs } from "./storage";
+import { SCENERIES } from "./sceneries";
+import type { Scenery } from "./sceneries/types";
+import {
+  bestChampionship,
+  bestFor,
+  championshipRecords,
+  cupById,
+  highScores,
+  lastGames,
+  type AudioPrefs,
+  type GameRecord,
+  type Prefs,
+} from "./storage";
+import type { Track } from "./track";
 
 export function el<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -18,6 +32,7 @@ const OVERLAYS = [
   "hud",
   "countdown",
   "banner",
+  "trophy-title",
   "screen-results",
 ];
 
@@ -55,7 +70,19 @@ export function renderMenu(): void {
   });
 }
 
+export function sceneryName(s: Scenery): string {
+  return s.name[getLang()];
+}
+
 export function renderSetup(prefs: Prefs): void {
+  const champ = prefs.soloMode === "championship";
+  document.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach((b) => {
+    b.classList.toggle("selected", b.dataset.mode === prefs.soloMode);
+  });
+  el("setup-race-options").classList.toggle("hidden", champ);
+  const info = el("setup-champ-info");
+  info.classList.toggle("hidden", !champ);
+  info.textContent = t("champIntro", { n: SCENERIES.length });
   document.querySelectorAll<HTMLButtonElement>("[data-category]").forEach((b) => {
     b.classList.toggle("selected", Number(b.dataset.category) === prefs.category);
   });
@@ -89,8 +116,11 @@ export function configLine(category: Category, difficulty: Difficulty): string {
   ].join(" · ");
 }
 
-export function renderCups(prefs: Prefs): void {
-  el("cups-config").textContent = configLine(prefs.category, prefs.difficulty);
+/** `run`: the championship run in progress (in memory), shown on its cup's card. */
+export function renderCups(prefs: Prefs, run: ChampionshipRun | null): void {
+  const champ = prefs.soloMode === "championship";
+  const n = SCENERIES.length;
+  el("cups-config").textContent = champ ? t("champIntro", { n }) : configLine(prefs.category, prefs.difficulty);
   for (const cup of CUPS) {
     const card = document.querySelector<HTMLElement>(`[data-cup="${cup.id}"]`)!;
     card.style.setProperty(
@@ -101,10 +131,17 @@ export function renderCups(prefs: Prefs): void {
     );
     card.querySelector(".cup-icon")!.textContent = cup.icon;
     card.querySelector(".cup-name")!.textContent = t(`cup.${cup.id}`);
-    const best = bestFor(prefs.category, cup.id, prefs.difficulty);
-    card.querySelector(".cup-best")!.textContent = best
-      ? t("best", { pos: ordinal(best.position!), time: fmtTime(best.elapsedMs) })
-      : t("noRecord");
+    let text: string;
+    if (champ) {
+      const best = bestChampionship(cup.id);
+      if (run?.cup === cup.id && !runComplete(run)) text = t("champProgress", { k: run.won + 1, n });
+      else if (best) text = t("champBest", { won: best.won, n: best.races, time: fmtTime(best.elapsedMs) });
+      else text = t("noRecord");
+    } else {
+      const best = bestFor(prefs.category, cup.id, prefs.difficulty);
+      text = best ? t("best", { pos: ordinal(best.position!), time: fmtTime(best.elapsedMs) }) : t("noRecord");
+    }
+    card.querySelector(".cup-best")!.textContent = text;
   }
 }
 
@@ -288,6 +325,7 @@ export function attachScrollHint(list: HTMLElement, up: HTMLElement, down: HTMLE
 }
 
 export function renderHostSettings(settings: RoomSettings): void {
+  el<HTMLSelectElement>("host-scenery").value = settings.scenery;
   for (const cup of CUPS) {
     const b = document.querySelector<HTMLElement>(`[data-host-cup="${cup.id}"]`)!;
     b.textContent = `${cup.icon} ${t(`cup.${cup.id}`)}`;
@@ -301,6 +339,66 @@ export function renderHostSettings(settings: RoomSettings): void {
     b.querySelector("small")!.textContent = t("secondsPerQuestion", { s: DIFFICULTIES[d] });
     b.classList.toggle("selected", d === settings.difficulty);
   });
+}
+
+/** Fills the host's circuit dropdown (in the current language). */
+export function renderSceneryOptions(select: HTMLSelectElement): void {
+  select.replaceChildren(...SCENERIES.map((s) => new Option(sceneryName(s), s.id)));
+}
+
+/**
+ * Dev preview minimap: the circuit from above (+z up). Ground white, tunnels dashed, bridges yellow
+ * on top; start dot red, player dot yellow (moveTrackMapDot).
+ */
+export function renderTrackMap(box: HTMLElement, track: Track): void {
+  const pts = track.points;
+  const n = pts.length;
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => -p.z);
+  const minX = Math.min(...xs) - 20;
+  const minY = Math.min(...ys) - 20;
+  const w = Math.max(...xs) + 20 - minX;
+  const h = Math.max(...ys) + 20 - minY;
+  const r = Math.max(w, h) / 45;
+  const stroke = 'fill="none" vector-effect="non-scaling-stroke" stroke-linejoin="round"';
+  // One polyline per run of equal support, each joined to the next run's first point (the last closes the loop).
+  const ground: string[] = [];
+  const bridges: string[] = [];
+  for (let start = 0; start < n; ) {
+    let end = start;
+    while (end + 1 < n && track.support[end + 1] === track.support[start]) end++;
+    const run = [...pts.slice(start, end + 1), pts[(end + 1) % n]];
+    const line = run.map((p) => `${p.x.toFixed(1)},${(-p.z).toFixed(1)}`).join(" ");
+    switch (track.support[start]) {
+      case "ground":
+        ground.push(`<polyline points="${line}" ${stroke} stroke="#fff" stroke-width="4" />`);
+        break;
+      case "tunnel":
+        ground.push(`<polyline points="${line}" ${stroke} stroke="#fff" stroke-width="4" stroke-dasharray="6 5" />`);
+        break;
+      case "bridge":
+        bridges.push(
+          `<polyline points="${line}" ${stroke} stroke="#000" stroke-width="9" />` +
+            `<polyline points="${line}" ${stroke} stroke="#ffd200" stroke-width="4" />`,
+        );
+        break;
+    }
+    start = end + 1;
+  }
+  box.innerHTML =
+    `<svg viewBox="${minX} ${minY} ${w} ${h}" preserveAspectRatio="xMidYMid meet">` +
+    ground.join("") +
+    bridges.join("") +
+    `<circle cx="${pts[0].x}" cy="${-pts[0].z}" r="${r * 0.7}" fill="#e4000f" />` +
+    `<circle class="dot" cx="${pts[0].x}" cy="${-pts[0].z}" r="${r}" fill="#ffd200" stroke="#000" stroke-width="2" vector-effect="non-scaling-stroke" />` +
+    "</svg>";
+  box.classList.remove("hidden");
+}
+
+export function moveTrackMapDot(box: HTMLElement, pos: { x: number; z: number }): void {
+  const dot = box.querySelector(".dot")!;
+  dot.setAttribute("cx", String(pos.x));
+  dot.setAttribute("cy", String(-pos.z));
 }
 
 export type BoardKind = "last" | "high";
@@ -342,6 +440,34 @@ export function renderBoard(
         (g) =>
           `<tr class="${g.timestamp === freshTimestamp ? "fresh" : ""}">` +
           columns.map(([, cell]) => `<td>${cell(g)}</td>`).join("") +
+          "</tr>",
+      )
+      .join("");
+}
+
+/** Championship records of `cup`, best first; the row of the run that began at `freshStartedAt` is highlighted. */
+export function renderChampionshipBoard(cup: CupId, freshStartedAt: number): void {
+  const records = championshipRecords(cup, 10);
+  const table = el("board");
+  if (records.length === 0) {
+    table.innerHTML = `<tr><td>${t("noGames")}</td></tr>`;
+    return;
+  }
+  const columns: [string, (r: ChampionshipRecord, rank: number) => string][] = [
+    ["colPos", (_, rank) => ordinal(rank)],
+    ["colName", (r) => escapeHtml(r.name)],
+    ["colRaces", (r) => `${r.won}/${r.races}`],
+    ["colTime", (r) => fmtTime(r.elapsedMs)],
+    ["colRetries", (r) => String(r.retries)],
+    ["colDate", (r) => fmtDate(r.timestamp)],
+  ];
+  table.innerHTML =
+    `<tr>${columns.map(([key]) => `<th>${t(key)}</th>`).join("")}</tr>` +
+    records
+      .map(
+        (r, i) =>
+          `<tr class="${r.startedAt === freshStartedAt ? "fresh" : ""}">` +
+          columns.map(([, cell]) => `<td>${cell(r, i + 1)}</td>`).join("") +
           "</tr>",
       )
       .join("");

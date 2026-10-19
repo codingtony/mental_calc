@@ -1,3 +1,4 @@
+import { compareChampionshipRecords, type ChampionshipRecord } from "./championship";
 import { CATEGORIES, CUPS, DIFFICULTIES, type Category, type CupId, type Difficulty } from "./config";
 import { LANGS, type Lang } from "./i18n";
 import { parseLook, type RiderLook } from "./look";
@@ -5,13 +6,17 @@ import { parseLook, type RiderLook } from "./look";
 // Prefixed keys: v1 (served at /1/) shares this origin and owns "highscore", "name", etc.
 const PREFS_KEY = "mcgp.prefs";
 const GAMES_KEY = "mcgp.games";
+const CHAMP_KEY = "mcgp.championship";
 const MAX_GAMES = 200;
+
+export type SoloMode = "single" | "championship";
 
 export interface Prefs {
   name: string;
   lang: Lang;
   category: Category;
   difficulty: Difficulty;
+  soloMode: SoloMode;
   music: boolean;
   sound: boolean;
   /** Rider look bought in the shop; null = default rider. */
@@ -53,6 +58,7 @@ export function loadPrefs(): Prefs {
     lang: LANGS.includes(p.lang as Lang) ? (p.lang as Lang) : "sv",
     category: CATEGORIES.includes(p.category as Category) ? (p.category as Category) : 30,
     difficulty: typeof p.difficulty === "string" && p.difficulty in DIFFICULTIES ? (p.difficulty as Difficulty) : "medium",
+    soloMode: p.soloMode === "championship" ? "championship" : "single",
     music: typeof p.music === "boolean" ? p.music : false,
     sound: typeof p.sound === "boolean" ? p.sound : false,
     look: parseLook(p.look),
@@ -105,6 +111,29 @@ export function highScores(category: Category, cup: CupId, difficulty: Difficult
 
 export function bestFor(category: Category, cup: CupId, difficulty: Difficulty): GameRecord | undefined {
   return highScores(category, cup, difficulty, 1)[0];
+}
+
+function loadChampionshipRecords(): ChampionshipRecord[] {
+  const raw = readJson(CHAMP_KEY);
+  return Array.isArray(raw) ? (raw as ChampionshipRecord[]) : [];
+}
+
+/** Replaces the record of the same run (startedAt): a run saves after each race it wins. */
+export function saveChampionshipRecord(record: ChampionshipRecord): void {
+  const records = loadChampionshipRecords().filter((r) => r.startedAt !== record.startedAt);
+  records.push(record);
+  localStorage.setItem(CHAMP_KEY, JSON.stringify(records.slice(-MAX_GAMES)));
+}
+
+export function championshipRecords(cup: CupId, limit = 10): ChampionshipRecord[] {
+  return loadChampionshipRecords()
+    .filter((r) => r.cup === cup)
+    .sort(compareChampionshipRecords)
+    .slice(0, limit);
+}
+
+export function bestChampionship(cup: CupId): ChampionshipRecord | undefined {
+  return championshipRecords(cup, 1)[0];
 }
 
 export function cupById(id: CupId) {
