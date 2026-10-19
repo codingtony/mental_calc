@@ -122,7 +122,7 @@ sessionStorage keys `mcgp.mp.host` (room code, host token and race state) and `m
 | `src/main.ts` | Screen state machine and render loop |
 
 In dev mode, `window.__mc` exposes `session()`, `solve()`, `fail()`, `host()`, `player()` and `world` for console testing.
-`?preview=<circuit id>` (dev only) rides one lap of that circuit alone from the player's view, with a minimap;
+`?preview=<circuit id>` (also in production, e.g. https://maths.codingtony.com/?preview=coast) rides one lap of that circuit alone from the player's view, with a minimap;
 `document.body.dataset.preview` goes `ready` → (click or key) `running` → `done` (`unknown` for a wrong id).
 Adding a circuit: see `.omp/skills/mc-scenery-add/SKILL.md`.
 

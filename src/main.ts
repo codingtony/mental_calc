@@ -106,8 +106,8 @@ const playerLook = prefs.look ?? DEFAULT_PLAYER_LOOK;
 const canvas = el<HTMLCanvasElement>("renderCanvas");
 const engine = new Engine(canvas, true, { stencil: false });
 engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio, 2));
-// Dev `?preview=<id>`: one lap of that circuit from the player's view (see startPreview).
-const previewParam = import.meta.env.DEV ? new URLSearchParams(location.search).get("preview") : null;
+// `?preview=<id>`: one lap of that circuit from the player's view (see startPreview), to review circuits.
+const previewParam = new URLSearchParams(location.search).get("preview");
 const previewScenery = PREVIEW_SCENERIES.find((s) => s.id === previewParam) ?? null;
 const world = await World.create(engine, playerLook, previewScenery ?? DEFAULT_SCENERY).catch((err: unknown) => {
   el("boot").textContent = t("loadFailed");
