@@ -260,6 +260,9 @@ export class World {
   /** Player's eased visual distance (m) and its rate (m/s), see update(). */
   private playerVis = 0;
   private playerVel = 0;
+  /** Finish line distance of the current race, and when the player's moto crossed it (-1: not yet). */
+  private finishLine = Infinity;
+  private crossedAtMs = -1;
 
   private boostRemaining = 0;
   private spinElapsed = -1;
@@ -389,7 +392,7 @@ export class World {
     if (mode === "intro" || mode === "menu" || mode === "trophy") this.resetPlayerEffects();
     if (mode === "menu" || mode === "trophy") this.menuStart = this.motoDist.slice();
     this.trophy.setEnabled(mode === "trophy");
-    if (mode === "finish") this.camera.position.subtractToRef(this.motos[0].root.position, this.finishOffset);
+    if (mode === "finish") this.crossedAtMs = -1;
   }
 
   /**
@@ -407,7 +410,10 @@ export class World {
     this.shadows.filteringQuality = q.shadowFilter;
   }
 
-  setupRace(_totalDistance: number): void {
+  /** `totalDistance`: where the finish line is (laps × lap length); "finish" mode rides up to it. */
+  setupRace(totalDistance: number): void {
+    this.finishLine = totalDistance;
+    this.crossedAtMs = -1;
     this.resetPlayerEffects();
     this.playerVis = 0;
     this.playerVel = 0;
@@ -510,7 +516,7 @@ export class World {
       case "finish":
       case "crash":
         if (race) {
-          if (this.mode === "finish") {
+          if (this.mode === "finish" && this.crossedAtMs >= 0) {
             // Past the line: ease to cruise speed and keep riding while the banner shows.
             this.playerVel += (TARGET_SPEED - this.playerVel) * (1 - Math.exp(-2 * dt));
             this.playerVis += this.playerVel * dt;
@@ -518,20 +524,33 @@ export class World {
             // Critically damped spring towards the race progress: the velocity stays continuous,
             // so an answer's boost accelerates the moto instead of jumping to full speed in a frame.
             // Exact solution per step: stable for any dt (slow devices hitch up to the 0.1 s cap).
+            const before = this.playerVis;
             const target = race.player * race.perQuestion;
             const e = this.playerVis - target;
             const k = Math.exp(-PLAYER_SPRING * dt);
             const j = (this.playerVel + PLAYER_SPRING * e) * dt;
             this.playerVis = target + (e + j) * k;
             this.playerVel = (this.playerVel - PLAYER_SPRING * j) * k;
+            if (this.mode === "finish") {
+              // Last answer given: the spring only nears the line, so never ride slower than cruise
+              // speed until the moto actually crosses it.
+              if (this.playerVis - before < TARGET_SPEED * dt) {
+                this.playerVis = before + TARGET_SPEED * dt;
+                this.playerVel = Math.max(this.playerVel, TARGET_SPEED);
+              }
+              if (this.playerVis >= this.finishLine) {
+                this.crossedAtMs = nowMs;
+                this.camera.position.subtractToRef(this.motos[0].root.position, this.finishOffset);
+              }
+            }
           }
           this.driveMoto(0, this.playerVis, nowMs, dt);
           for (let i = 1; i < this.motos.length; i++) {
             this.driveMoto(i, (race.rivals[i - 1] ?? 0) * race.perQuestion, nowMs, dt);
           }
         }
-        if (this.mode === "race") this.chaseCamera();
-        else if (this.mode === "finish") this.finishCamera(dt, t);
+        if (this.mode === "race" || (this.mode === "finish" && this.crossedAtMs < 0)) this.chaseCamera();
+        else if (this.mode === "finish") this.finishCamera(dt, (nowMs - this.crossedAtMs) / 1000);
         else this.crashCamera();
         break;
     }
@@ -848,6 +867,11 @@ export class World {
     const p = this.motos[0].root.position;
     this.camTarget.set(p.x, p.y + 0.5, p.z);
     this.camera.fov = BASE_FOV;
+  }
+
+  /** In "finish" mode: the player's moto has crossed the finish line (banner, finish sound, orbit camera). */
+  crossedFinish(): boolean {
+    return this.crossedAtMs >= 0;
   }
 
   /** Applies camera-shake offset to the look target, then aims the camera. */

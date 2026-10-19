@@ -164,9 +164,13 @@ function later(ms: number, fn: () => void): void {
   timers.push(window.setTimeout(fn, ms));
 }
 
+/** Runs once the player's moto crosses the finish line (render loop); dropped with the timers. */
+let onFinishLine: (() => void) | null = null;
+
 function clearTimers(): void {
   timers.forEach((id) => window.clearTimeout(id));
   timers = [];
+  onFinishLine = null;
 }
 
 // ---------- Audio unlock (browsers only allow audio after a user gesture) ----------
@@ -466,7 +470,6 @@ function submitAnswer(value: string): void {
       break;
     case "finished":
       world.boost();
-      audio.finish();
       endRace(now, "finish", FINISH_TO_RESULTS_MS);
       break;
     case "crashed":
@@ -490,10 +493,12 @@ function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number):
   answerEl.blur();
   el("question").classList.add("hidden");
   updateHud(now);
-  const banner = el("banner");
-  banner.textContent = t(kind);
-  banner.className = kind;
   world.setMode(kind, now);
+  const banner = el("banner");
+  const showBanner = () => {
+    banner.textContent = t(kind);
+    banner.className = kind;
+  };
 
   const elapsedMs = s.elapsedMs(now);
   const crashed = s.status === "crashed";
@@ -523,7 +528,19 @@ function endRace(now: number, kind: "finish" | "crash", resultsDelayMs: number):
   }
   // The last championship race won: trophy and fanfare first.
   const champion = !player && raceKind === "championship" && runComplete(champRun!);
-  later(resultsDelayMs, () => (champion ? celebrateChampion(() => showResults(s, elapsedMs)) : showResults(s, elapsedMs)));
+  const results = () => (champion ? celebrateChampion(() => showResults(s, elapsedMs)) : showResults(s, elapsedMs));
+  if (kind === "crash") {
+    showBanner();
+    later(resultsDelayMs, results);
+    return;
+  }
+  // The race (and its time) ended with the last answer, but the moto is still riding up to the line:
+  // the banner, the finish sound and the results wait until it actually crosses it.
+  onFinishLine = () => {
+    showBanner();
+    audio.finish();
+    later(resultsDelayMs, results);
+  };
 }
 
 /** Multiplayer games never touch the local high scores: the kid's result lives only here. */
@@ -1139,6 +1156,11 @@ engine.runRenderLoop(() => {
     };
   } else if (screen === "preview" && preview) frame = previewFrame(now);
   world.update(dt, now, frame);
+  if (onFinishLine && world.crossedFinish()) {
+    const crossed = onFinishLine;
+    onFinishLine = null;
+    crossed();
+  }
   if (screen === "preview") moveTrackMapDot(el("track-map"), world.track.positionAt(world.playerDistance(), 0).pos);
   if (racing) {
     updateHud(now);
