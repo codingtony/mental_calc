@@ -904,10 +904,6 @@ button {
   min-height: 96px;
 }
 
-.scroll-box:has(> #host-players:empty) {
-  display: none;
-}
-
 /* One row of name chips: with few players the box is no taller than its names. */
 #host-lobby > .scroll-box {
   min-height: 50px;

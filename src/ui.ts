@@ -258,7 +258,11 @@ export function renderNames(list: HTMLElement, names: string[], highlight: strin
 
 export function renderHostPlayers(players: { id: string; name: string; connected: boolean }[]): void {
   el("host-count").textContent = players.length ? t("mpPlayers", { n: players.length }) : t("mpWaitingPlayers");
-  el("host-players").innerHTML = players
+  const list = el("host-players");
+  // Hidden from JS: Safari 26 never re-checks a `:has(> #host-players:empty)` rule when the first
+  // player's chip is inserted, so the box stayed hidden for the whole first lobby.
+  list.parentElement!.classList.toggle("hidden", players.length === 0);
+  list.innerHTML = players
     .map(
       (p) =>
         `<li class="${p.connected ? "" : "offline"}">${escapeHtml(p.name)}` +
