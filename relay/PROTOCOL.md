@@ -14,8 +14,10 @@ connection decides its role: `create` (host) or `join` (player).
 
 ```ts
 type Settings = { cup: "add" | "addsub" | "mul" | "muldiv" | "all"; n: 10 | 30 | 50 | 120;
-                  difficulty: "easy" | "medium" | "hard" };   // opaque to the relay, except that
-                                                            // cup/n/difficulty feed the usage events
+                  difficulty: "easy" | "medium" | "hard";   // opaque to the relay, except that
+                  scenery: string };                        // cup/n/difficulty feed the usage events
+// scenery: circuit id from the client's `src/sceneries`; clients use their first circuit for an
+// unknown or missing id.
 type Status = "racing" | "finished" | "crashed" | "disconnected";
 type TopRow = { name: string; done: number; status: Status; ms: number;   // ms = finish, crash or
                 look?: Look };                                            // last-answer time

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLook } from "./look";
+import { BIKE_PALETTE, DEFAULT_PLAYER_LOOK, parseLook, randomBikeLook } from "./look";
 
 const valid = { body: "girl", bike: [0.9, 0.05, 0.1], suit: [0.2, 0.5, 1], helmet: "mirror", helmetColor: [1, 1, 1] };
 
@@ -28,5 +28,19 @@ describe("parseLook", () => {
 
   it("clamps channels to [0, 1]", () => {
     expect(parseLook({ ...valid, bike: [1.5, -0.2, 0.5] })?.bike).toEqual([1, 0, 0.5]);
+  });
+});
+
+describe("randomBikeLook", () => {
+  it("draws from 16 distinct colours, first to last", () => {
+    expect(new Set(BIKE_PALETTE.map((c) => c.join())).size).toBe(16);
+    expect(randomBikeLook(DEFAULT_PLAYER_LOOK, () => 0).bike).toEqual(BIKE_PALETTE[0]);
+    expect(randomBikeLook(DEFAULT_PLAYER_LOOK, () => 0.9999).bike).toEqual(BIKE_PALETTE[15]);
+  });
+
+  it("keeps the rest of the look and survives the network round trip", () => {
+    const look = randomBikeLook(DEFAULT_PLAYER_LOOK, () => 0.5);
+    expect(look).toMatchObject({ body: DEFAULT_PLAYER_LOOK.body, helmet: DEFAULT_PLAYER_LOOK.helmet, suit: look.bike });
+    expect(parseLook(JSON.parse(JSON.stringify(look)))).toEqual(look);
   });
 });

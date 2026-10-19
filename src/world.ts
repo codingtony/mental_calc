@@ -1,4 +1,6 @@
 import {
+  AbstractMesh,
+  BaseTexture,
   Color3,
   Color4,
   DirectionalLight,
@@ -6,25 +8,66 @@ import {
   Engine,
   HemisphericLight,
   ImageProcessingConfiguration,
+  Material,
+  MultiMaterial,
   Matrix,
   Mesh,
   MeshBuilder,
   Scene,
   Quaternion,
   ShadowGenerator,
+  SpotLight,
   StandardMaterial,
   UniversalCamera,
   Vector3,
+  VertexBuffer,
+  VertexData,
 } from "@babylonjs/core";
-import { finishPrefabs, loadAssets, place, type Assets } from "./assets";
+import { clearPrefabs, finishPrefabs, loadAssets, place, type Assets } from "./assets";
+import { additiveMaterial, buildBuildings, buildLampLights, glowTexture, insideBuildings, placeProps } from "./dressing";
 import { LANE_OFFSETS, RIVALS, TARGET_SPEED } from "./config";
 import type { RiderLook, Rgb } from "./look";
 import { createMoto, FOOT_DOWN_LEAN, type Moto } from "./moto";
 import { mulberry32 } from "./rng";
-import { MEADOW, type SceneryTheme } from "./theme";
+import type { Lighting, Scenery, Water } from "./sceneries/types";
+import type { Terrain } from "./terrain";
 import { Track } from "./track";
 
-export type WorldMode = "intro" | "menu" | "race" | "finish" | "crash";
+interface LightingLook {
+  /** Sky fill: intensity, sky and ground colours. */
+  hemi: number;
+  hemiSky: Rgb;
+  hemiGround: Rgb;
+  /** Sun (the moon at night): intensity, colour, height above the horizon in degrees. */
+  sun: number;
+  sunColor: Rgb;
+  elevation: number;
+  /** Share of their authored self-illumination that lit materials keep (night darkens them). */
+  emissive: number;
+}
+
+const LIGHTING: Record<Lighting, LightingLook> = {
+  // Day: the (-1, -2, -1) sun at the default azimuth.
+  day: { hemi: 0.75, hemiSky: [1, 1, 1], hemiGround: [0.45, 0.45, 0.5], sun: 0.8, sunColor: [1, 1, 1], elevation: 54.74, emissive: 1 },
+  sunset: { hemi: 0.6, hemiSky: [1, 0.8, 0.66], hemiGround: [0.45, 0.36, 0.42], sun: 1, sunColor: [1, 0.66, 0.4], elevation: 14, emissive: 0.85 },
+  night: { hemi: 0.4, hemiSky: [0.5, 0.6, 0.95], hemiGround: [0.14, 0.14, 0.2], sun: 0.25, sunColor: [0.65, 0.75, 1], elevation: 40, emissive: 0.45 },
+};
+/** Degrees clockwise from +z when the scenery sets no sunAzimuth. */
+const DEFAULT_SUN_AZIMUTH = 45;
+/** Sunset sun disc / night moon: elevation (degrees) and distance on the sky dome (radius 900 m). */
+const SUN_DISC_ELEVATION = 5;
+const MOON_ELEVATION = 35;
+const SKY_OBJECT_DISTANCE = 800;
+/** Player's headlight spot: range (m) and intensity. */
+const HEADLIGHT_RANGE = 70;
+const HEADLIGHT_INTENSITY = 2.2;
+/** Championship trophy (placeTrophy): distance from the camera (m), drop time (s), drop height (m), spin (rad/s). */
+const TROPHY_DISTANCE = 11;
+const TROPHY_DROP_SECONDS = 1.4;
+const TROPHY_DROP_HEIGHT = 9;
+const TROPHY_SPIN = 1.6;
+
+export type WorldMode = "intro" | "menu" | "race" | "finish" | "crash" | "trophy";
 
 export interface RaceFrame {
   player: number;
@@ -48,8 +91,26 @@ const PLAYER_SPRING = 6;
 /** Below this speed (m/s) a rider puts a foot down; the foot moves at FOOT_RATE (1/s). */
 const FOOT_DOWN_SPEED = 2;
 const FOOT_RATE = 8;
-/** Vegetation never comes closer than this to another placed prop. */
+/** Vegetation never comes closer than this to another placed prop (default of Vegetation.spacing). */
 const PROP_SPACING = 12;
+/** Vegetation never grows within this distance of a tunnel (the rock shell covers ~28 m each side). */
+const TUNNEL_CLEARANCE = 32;
+/** Ground vertices inside a tunnel's strip sit this far under its road (4 m ground cells vs a sloping road). */
+const TUNNEL_FLOOR_SINK = 0.3;
+/** Half width of a tunnel tube (track.ts TUBE_PROFILE walls). */
+const TUBE_HALF_WIDTH = 12;
+/** Ground emissive = grassBase × GROUND_GLOW (meadow: ≈ 0.08, 0.18, 0.06); Babylon multiplies it by texture × vertex colour. */
+const GROUND_GLOW = 0.28;
+/** Shore colour up to SHORE_SAND m from the water's edge, fading out over SHORE_BLEND m. */
+const SHORE_SAND = 14;
+const SHORE_BLEND = 10;
+/** Snow fades in from SNOW_BLEND m below the snow line to SNOW_BLEND m above it. */
+const SNOW_BLEND = 3;
+/** Water surface opacity: the shallow bed shows through near the shore. */
+const WATER_ALPHA = 0.85;
+/** Canyon rock vertices further than ROCK_JITTER_CLEAR m from open road move up to ±ROCK_JITTER m in plan (facets; never folds 4 m cells). */
+const ROCK_JITTER = 0.8;
+const ROCK_JITTER_CLEAR = 20;
 
 /**
  * Quality levels, cheapest last. `pixelScale` multiplies the hardware scaling level (1.5 renders
@@ -83,6 +144,77 @@ function flatMaterial(scene: Scene, name: string, color: Color3): StandardMateri
   return mat;
 }
 
+/**
+ * Vertex colour of the ground at (x, y, z): multiplies the grass texture so it reads as `rock` (a cut's
+ * rock colour, on its faceted rock mesh), the shore colour along the water and the snow colour above the
+ * snow line; white elsewhere. Null when the scenery has none of these (no colour buffer at all).
+ */
+function groundTint(scenery: Scenery, terrain: Terrain, x: number, y: number, z: number, rock: Rgb | null): [number, number, number] | null {
+  if (!scenery.water?.shore && !scenery.snowLine && !scenery.cuts?.some((c) => c.color)) return null;
+  const layers: [Rgb, number][] = [];
+  if (rock) layers.push([rock, 1]);
+  if (scenery.water?.shore) layers.push([scenery.water.shore, 1 - smoothstep((terrain.shoreDistance(x, z) - SHORE_SAND) / SHORE_BLEND)]);
+  if (scenery.snowLine) {
+    const { height, color } = scenery.snowLine;
+    layers.push([color, smoothstep((y - height + SNOW_BLEND) / (2 * SNOW_BLEND))]);
+  }
+  const tint: [number, number, number] = [1, 1, 1];
+  for (const [color, t] of layers) {
+    for (let c = 0; c < 3; c++) tint[c] += (color[c] / Math.max(0.05, scenery.grassBase[c]) - tint[c]) * t;
+  }
+  return tint;
+}
+
+/**
+ * Texture coordinates (16 m per repeat) for a flat-shaded mesh (no shared vertices): each triangle is
+ * projected on the plane its normal faces most, so steep rock faces show the texture unstretched.
+ */
+function faceUVs(positions: ArrayLike<number>, indices: ArrayLike<number>): number[] {
+  const uvs = new Array<number>((positions.length / 3) * 2).fill(0);
+  for (let k = 0; k < indices.length; k += 3) {
+    const [a, b, c] = [indices[k], indices[k + 1], indices[k + 2]];
+    const e1 = [0, 1, 2].map((i) => positions[3 * b + i] - positions[3 * a + i]);
+    const e2 = [0, 1, 2].map((i) => positions[3 * c + i] - positions[3 * a + i]);
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]].map(Math.abs);
+    // Plane axes: the two coordinates other than the normal's dominant one.
+    const [u, v] = n[1] >= n[0] && n[1] >= n[2] ? [0, 2] : n[0] >= n[2] ? [2, 1] : [0, 1];
+    for (const i of [a, b, c]) {
+      uvs[2 * i] = positions[3 * i + u] / 16;
+      uvs[2 * i + 1] = positions[3 * i + v] / 16;
+    }
+  }
+  return uvs;
+}
+
+/** Plan points hashed in square cells: fast "is any point closer than r" queries for the scatter. */
+class PlanGrid {
+  private readonly cells = new Map<number, number[]>();
+
+  constructor(private readonly cell: number) {}
+
+  add(x: number, z: number): void {
+    // Keys cover ±32 km in cells of ≥ 1 m: far beyond the ±800 m map.
+    const key = (Math.floor(x / this.cell) + 32768) * 65536 + Math.floor(z / this.cell) + 32768;
+    const list = this.cells.get(key);
+    if (list) list.push(x, z);
+    else this.cells.set(key, [x, z]);
+  }
+
+  near(x: number, z: number, r: number): boolean {
+    const reach = Math.ceil(r / this.cell);
+    const cx = Math.floor(x / this.cell);
+    const cz = Math.floor(z / this.cell);
+    for (let i = cx - reach; i <= cx + reach; i++) {
+      for (let j = cz - reach; j <= cz + reach; j++) {
+        const list = this.cells.get((i + 32768) * 65536 + j + 32768);
+        if (!list) continue;
+        for (let k = 0; k < list.length; k += 2) if ((list[k] - x) ** 2 + (list[k + 1] - z) ** 2 < r * r) return true;
+      }
+    }
+    return false;
+  }
+}
+
 interface Smoke {
   mesh: Mesh;
   mat: StandardMaterial;
@@ -92,10 +224,22 @@ interface Smoke {
 
 export class World {
   readonly scene: Scene;
-  readonly track: Track;
-  readonly theme: SceneryTheme;
+  private readonly assets: Assets;
+  private circuit: Track | null = null;
+  private current: Scenery | null = null;
+  /** Meshes, materials and textures built for the current scenery (disposed by the next setScenery). */
+  private owned: { meshes: AbstractMesh[]; materials: Material[]; textures: BaseTexture[] } = { meshes: [], materials: [], textures: [] };
 
   private readonly camera: UniversalCamera;
+  private readonly hemi: HemisphericLight;
+  /** Night riding: headlight lens meshes (on the motos), road pools (one per moto, laid on the road by placeMoto), the player's spot light. */
+  private readonly headlightMeshes: Mesh[] = [];
+  private readonly headlightPools: Mesh[] = [];
+  private headlight: SpotLight | null = null;
+  private night = false;
+  private readonly trophy: Mesh;
+  /** Authored emissive colour of every material the lighting dims (see applyLighting). */
+  private readonly baseEmissive = new WeakMap<StandardMaterial, Color3>();
   private readonly sun: DirectionalLight;
   private shadows: ShadowGenerator;
   /** Hardware scaling set by the caller before the world was built (quality level 0). */
@@ -125,23 +269,22 @@ export class World {
   private readonly camTarget = new Vector3(0, 0, 0);
   /** Finish orbit: camera position relative to the player moto, eased towards the orbit pose. */
   private readonly finishOffset = new Vector3();
+  /** Menu orbit height: 90 m, raised to clear the current scenery's mountains (see buildScenery). */
+  private orbitHeight = 90;
 
   /** Loads the 3D models, then builds the world. Rejects when a model fails to load. */
-  static async create(engine: Engine, playerLook: RiderLook, theme: SceneryTheme = MEADOW): Promise<World> {
+  static async create(engine: Engine, playerLook: RiderLook, scenery: Scenery): Promise<World> {
     const scene = new Scene(engine);
     const assets = await loadAssets(scene);
-    return new World(scene, assets, playerLook, theme);
+    return new World(scene, assets, playerLook, scenery);
   }
 
-  private constructor(scene: Scene, assets: Assets, playerLook: RiderLook, theme: SceneryTheme) {
-    this.theme = theme;
+  private constructor(scene: Scene, assets: Assets, playerLook: RiderLook, scenery: Scenery) {
     this.scene = scene;
-    const horizon = new Color3(...theme.skyHorizon);
-    scene.clearColor = new Color4(horizon.r, horizon.g, horizon.b, 1);
+    this.assets = assets;
     scene.fogMode = Scene.FOGMODE_LINEAR;
     scene.fogStart = 250;
     scene.fogEnd = 700;
-    scene.fogColor = horizon;
     scene.skipPointerMovePicking = true;
     const ip = scene.imageProcessingConfiguration;
     ip.toneMappingEnabled = true;
@@ -153,6 +296,7 @@ export class World {
     // Sun stronger than the sky fill so the motos' shadows read on the dark asphalt.
     hemi.intensity = 0.75;
     hemi.groundColor = new Color3(0.45, 0.45, 0.5);
+    this.hemi = hemi;
     const sun = new DirectionalLight("sun", new Vector3(-1, -2, -1), scene);
     sun.intensity = 0.8;
     // Shadow frustum follows the player (see update), so a small map stays sharp.
@@ -174,10 +318,7 @@ export class World {
     this.camera.fov = BASE_FOV;
     this.camera.setTarget(Vector3.Zero());
 
-    this.track = new Track(scene);
-    const props = this.track.buildProps(assets.prefabs);
-    this.buildScenery(theme, assets, props);
-    finishPrefabs(assets.prefabs);
+    this.setScenery(scenery);
 
     for (let i = 0; i <= RIVALS.length; i++) {
       const look = i === 0 ? playerLook : RIVALS[i - 1].look;
@@ -190,14 +331,64 @@ export class World {
       this.motoLean.push(0);
       this.motoFoot.push(0);
     }
+    this.createHeadlights();
+    this.trophy = this.createTrophy();
+    this.applyLighting(scenery);
     this.setMode("intro", performance.now());
+  }
+
+  get track(): Track {
+    return this.circuit!;
+  }
+
+  get scenery(): Scenery {
+    return this.current!;
+  }
+
+  /** Rebuilds the circuit and its surroundings; synchronous (create() loaded every model). */
+  setScenery(scenery: Scenery): void {
+    if (this.current?.id === scenery.id) return;
+    const t0 = performance.now();
+    const scene = this.scene;
+    if (this.circuit) for (const m of this.circuit.casters) this.shadows.removeShadowCaster(m, false);
+    for (const m of this.owned.meshes) if (!m.isDisposed()) m.dispose(false, false);
+    for (const m of this.owned.materials) m.dispose();
+    for (const t of this.owned.textures) t.dispose();
+    clearPrefabs(this.assets.prefabs);
+
+    const meshes = new Set(scene.meshes);
+    const materials = new Set(scene.materials);
+    const textures = new Set(scene.textures);
+    const horizon = new Color3(...scenery.skyHorizon);
+    scene.clearColor = new Color4(horizon.r, horizon.g, horizon.b, 1);
+    scene.fogColor = horizon;
+    this.circuit = new Track(scene, scenery);
+    for (const m of this.circuit.casters) this.shadows.addShadowCaster(m, false);
+    const night = scenery.lighting === "night";
+    const { bulky, lamps } = this.circuit.buildProps(this.assets.prefabs);
+    const placed = placeProps(this.assets.prefabs, scenery.props ?? [], this.circuit.terrain);
+    buildBuildings(scene, scenery.buildings ?? [], this.circuit.terrain, night);
+    if (night) buildLampLights(scene, lamps);
+    this.buildScenery(scenery, [...bulky, ...placed]);
+    finishPrefabs(this.assets.prefabs);
+
+    // Whatever appeared while building belongs to this scenery: no per-feature disposal bookkeeping.
+    this.owned = {
+      meshes: scene.meshes.filter((m) => !meshes.has(m)),
+      materials: scene.materials.filter((m) => !materials.has(m)),
+      textures: scene.textures.filter((t) => !textures.has(t)),
+    };
+    this.current = scenery;
+    this.applyLighting(scenery);
+    console.info(`[scenery] ${scenery.id} built in ${Math.round(performance.now() - t0)} ms`);
   }
 
   setMode(mode: WorldMode, nowMs: number): void {
     this.mode = mode;
     this.modeT0 = nowMs;
-    if (mode === "intro" || mode === "menu") this.resetPlayerEffects();
-    if (mode === "menu") this.menuStart = this.motoDist.slice();
+    if (mode === "intro" || mode === "menu" || mode === "trophy") this.resetPlayerEffects();
+    if (mode === "menu" || mode === "trophy") this.menuStart = this.motoDist.slice();
+    this.trophy.setEnabled(mode === "trophy");
     if (mode === "finish") this.camera.position.subtractToRef(this.motos[0].root.position, this.finishOffset);
   }
 
@@ -249,6 +440,15 @@ export class World {
     }
   }
 
+  /** The player's own moto look (class races use the colour picked at joining); no-op when unchanged. */
+  setPlayerLook(look: RiderLook): void {
+    const key = JSON.stringify(look);
+    if (key === this.appliedLook[0]) return;
+    this.appliedLook[0] = key;
+    this.motos[0].setLook(look);
+    for (const m of this.motos[0].casters) this.shadows.addShadowCaster(m, false);
+  }
+
   /** Player's visual distance along the track in world units. */
   playerDistance(): number {
     return this.motoDist[0];
@@ -278,7 +478,7 @@ export class World {
       mat.alpha = 0.8;
       mesh.material = mat;
       mesh.isPickable = false;
-      const baseY = 0.5 + rand() * 0.5;
+      const baseY = root.position.y + 0.5 + rand() * 0.5;
       mesh.position.set(root.position.x + (rand() - 0.5) * 2.5, baseY, root.position.z + (rand() - 0.5) * 2.5);
       mesh.scaling.setAll(0.5);
       // Stagger slightly so the puffs don't move in lockstep.
@@ -299,10 +499,12 @@ export class World {
         this.introCamera(t);
         break;
       case "menu":
+      case "trophy":
         for (let i = 0; i < this.motos.length; i++) {
           this.driveMoto(i, (this.menuStart[i] ?? 0) + (25 + i) * t, nowMs, dt);
         }
         this.menuCamera(t);
+        if (this.mode === "trophy") this.placeTrophy(t);
         break;
       case "race":
       case "finish":
@@ -374,15 +576,32 @@ export class World {
 
   private placeMoto(i: number, distance: number, lateral: number, wheelSpin: number): void {
     const moto = this.motos[i];
-    const { pos, heading } = this.track.positionAt(distance, lateral);
+    const { pos, heading, pitch } = this.track.positionAt(distance, lateral);
     const root = moto.root;
     root.position.copyFrom(pos);
-    root.position.y = 0;
-    // A stopped moto rests on the rider's left foot (positive rotation.z leans left).
-    root.rotation.set(0, heading, this.motoLean[i] + FOOT_DOWN_LEAN * this.motoFoot[i]);
+    // Uphill = nose up = negative x rotation. A stopped moto rests on the rider's left foot (positive rotation.z leans left).
+    root.rotation.set(-pitch, heading, this.motoLean[i] + FOOT_DOWN_LEAN * this.motoFoot[i]);
     for (const w of moto.wheels) w.rotation.x += wheelSpin;
 
+    // Headlight beam: flat on the road ahead and level with it, whatever the lean (a child of the
+    // rolled root would sink half into the road). Off while the player's bike lies on its side.
+    const front = this.assets.moto.length / 2;
+    const lit = this.night && root.isEnabled(false) && !(i === 0 && this.crashElapsed >= 0);
+    const pool = this.headlightPools[i];
+    pool.setEnabled(lit);
+    if (lit) {
+      const ahead = this.track.positionAt(distance + front + 8, lateral);
+      pool.position.set(ahead.pos.x, ahead.pos.y + 0.08, ahead.pos.z);
+      pool.rotation.set(-ahead.pitch, ahead.heading, 0);
+    }
+
     if (i !== 0) return;
+    if (this.headlight) {
+      const fx = Math.sin(heading);
+      const fz = Math.cos(heading);
+      this.headlight.position.set(pos.x + fx * front, pos.y + 1.1, pos.z + fz * front);
+      this.headlight.direction.set(fx * Math.cos(pitch), Math.sin(pitch) - 0.2, fz * Math.cos(pitch));
+    }
     if (this.spinElapsed >= 0) {
       const p = Math.min(1, this.spinElapsed / SPIN_SECONDS);
       root.rotation.y += 2 * Math.PI * (1 - (1 - p) ** 3);
@@ -391,12 +610,90 @@ export class World {
       const p = Math.min(1, this.crashElapsed / CRASH_SECONDS);
       const ease = 1 - (1 - p) ** 2;
       // Small hop, then the bike falls over onto its side.
-      root.position.y = 0.8 * 4 * p * (1 - p);
+      root.position.y = pos.y + 0.8 * 4 * p * (1 - p);
       root.rotation.z = 1.35 * ease;
     }
   }
 
-  /** Shadow generator for the sun, with every moto's meshes as casters. */
+  /**
+   * Night riding: a lens and a light pool on the road ahead of every moto (cheap additive decals),
+   * plus a real spot light on the player's (hemi + sun + spot: StandardMaterial lights up to 4).
+   */
+  private createHeadlights(): void {
+    const scene = this.scene;
+    const lensMat = new StandardMaterial("headlightLensMat", scene);
+    lensMat.disableLighting = true;
+    lensMat.diffuseColor = Color3.Black();
+    lensMat.specularColor = Color3.Black();
+    lensMat.emissiveColor = new Color3(1, 0.97, 0.85);
+    const poolTex = glowTexture(scene, "headlightPoolTex", [
+      [0, "rgba(255,255,255,0.9)"],
+      [0.45, "rgba(255,255,255,0.45)"],
+      [1, "rgba(255,255,255,0)"],
+    ]);
+    const poolMat = additiveMaterial(scene, "headlightPoolMat", poolTex, new Color3(0.5, 0.47, 0.38));
+    poolMat.zOffset = -4;
+    const front = this.assets.moto.length / 2;
+    for (const moto of this.motos) {
+      const lens = MeshBuilder.CreateSphere(`${moto.root.name}-lens`, { diameter: 0.2, segments: 6 }, scene);
+      lens.material = lensMat;
+      lens.parent = moto.root;
+      lens.position.set(0, 0.85, front - 0.15);
+      lens.isPickable = false;
+      // Not parented to the moto: it would roll with the lean and sink half into the road (placeMoto
+      // lays it flat on the road ahead instead).
+      const pool = MeshBuilder.CreateGround(`${moto.root.name}-beam`, { width: 7, height: 18 }, scene);
+      pool.material = poolMat;
+      pool.isPickable = false;
+      this.headlightMeshes.push(lens);
+      this.headlightPools.push(pool);
+    }
+    // Wide cone with a steep exponent: the beam fades out before its hard edge. Placed by placeMoto
+    // (level with the road, ignoring the lean).
+    const spot = new SpotLight("headlight", Vector3.Zero(), new Vector3(0, -0.2, 1), 1.3, 10, scene);
+    spot.range = HEADLIGHT_RANGE;
+    spot.intensity = HEADLIGHT_INTENSITY;
+    spot.diffuse = new Color3(1, 0.93, 0.78);
+    spot.specular = Color3.Black();
+    this.headlight = spot;
+  }
+
+  /** Lights, sun direction and the materials' self-illumination for the scenery's time of day. */
+  private applyLighting(scenery: Scenery): void {
+    const lighting = scenery.lighting ?? "day";
+    const look = LIGHTING[lighting];
+    this.hemi.intensity = look.hemi;
+    this.hemi.diffuse = new Color3(...look.hemiSky);
+    this.hemi.groundColor = new Color3(...look.hemiGround);
+    const azimuth = ((scenery.sunAzimuth ?? DEFAULT_SUN_AZIMUTH) * Math.PI) / 180;
+    const elevation = (look.elevation * Math.PI) / 180;
+    // The light travels from the sun towards the ground.
+    this.sun.direction = new Vector3(
+      -Math.sin(azimuth) * Math.cos(elevation),
+      -Math.sin(elevation),
+      -Math.cos(azimuth) * Math.cos(elevation),
+    );
+    this.sun.intensity = look.sun;
+    this.sun.diffuse = new Color3(...look.sunColor);
+    // Prefab materials outlive the scenery: scale from their authored colour, never compound.
+    const prefabMaterials = Object.values(this.assets.prefabs).flatMap((p) =>
+      p.mesh.material instanceof MultiMaterial ? p.mesh.material.subMaterials : [p.mesh.material],
+    );
+    for (const mat of [...this.owned.materials, ...prefabMaterials]) {
+      if (!(mat instanceof StandardMaterial) || mat.disableLighting) continue;
+      let base = this.baseEmissive.get(mat);
+      if (!base) {
+        base = mat.emissiveColor.clone();
+        this.baseEmissive.set(mat, base);
+      }
+      base.scaleToRef(look.emissive, mat.emissiveColor);
+    }
+    this.night = lighting === "night";
+    for (const m of this.headlightMeshes) m.setEnabled(this.night);
+    this.headlight?.setEnabled(this.night);
+  }
+
+  /** Shadow generator for the sun, with every moto's meshes and the circuit's casters. */
   private createShadows(size: number, filter: number): ShadowGenerator {
     const shadows = new ShadowGenerator(size, this.sun);
     shadows.usePercentageCloserFiltering = true;
@@ -404,6 +701,7 @@ export class World {
     shadows.bias = 0.002;
     shadows.normalBias = 0.02;
     for (const moto of this.motos) for (const m of moto.casters) shadows.addShadowCaster(m, false);
+    for (const m of this.circuit?.casters ?? []) shadows.addShadowCaster(m, false);
     return shadows;
   }
 
@@ -460,22 +758,64 @@ export class World {
 
   private introCamera(t: number): void {
     const a = this.track.positionAt(60, 12).pos;
-    a.y = 1.5;
+    a.y += 1.5;
     const b = this.track.positionAt(40, 0).pos;
-    b.y = 1;
+    b.y += 1;
     const s = smoothstep((t - INTRO_CUT_SECONDS) / (INTRO_SECONDS - INTRO_CUT_SECONDS));
-    Vector3.LerpToRef(a, new Vector3(0, 120, -220), s, this.camera.position);
+    Vector3.LerpToRef(a, new Vector3(0, this.orbitHeight + 30, -220), s, this.camera.position);
     Vector3.LerpToRef(b, Vector3.ZeroReadOnly, s, this.camTarget);
     this.camera.fov = BASE_FOV;
   }
 
   private menuCamera(t: number): void {
-    // Start the orbit at the intro's end pose (0,120,-220) direction.
+    // Start the orbit at the intro's end pose (0, orbitHeight + 30, -220) direction.
     const angle = Math.PI + 0.05 * t;
-    // Ease the height down from the intro's final 120 so the cut to the menu is seamless.
-    this.camera.position.set(220 * Math.sin(angle), 90 + 30 * Math.exp(-t * 1.5), 220 * Math.cos(angle));
+    // Ease the height down from the intro's final pose so the cut to the menu is seamless.
+    this.camera.position.set(220 * Math.sin(angle), this.orbitHeight + 30 * Math.exp(-t * 1.5), 220 * Math.cos(angle));
     this.camTarget.set(0, 0, 0);
     this.camera.fov = BASE_FOV;
+  }
+
+  /** Championship trophy: drops in front of the menu camera with a bounce, then keeps spinning. */
+  private placeTrophy(t: number): void {
+    const dir = this.camTarget.subtract(this.camera.position).normalize();
+    const p = Math.min(1, t / TROPHY_DROP_SECONDS);
+    // Ease-out bounce: falls, then two small rebounds.
+    const bounce =
+      p < 0.6 ? 1 - (p / 0.6) ** 2 : p < 0.85 ? 0.12 * Math.sin(((p - 0.6) / 0.25) * Math.PI) : 0.03 * Math.sin(((p - 0.85) / 0.15) * Math.PI);
+    this.camera.position.addToRef(dir.scale(TROPHY_DISTANCE), this.trophy.position);
+    this.trophy.position.y += -2.2 + TROPHY_DROP_HEIGHT * bounce;
+    this.trophy.rotation.y = Math.atan2(dir.x, dir.z) + t * TROPHY_SPIN;
+  }
+
+  /** Gold cup (lathe body, two handles, stepped base), about 4 m tall; shown only in "trophy" mode. */
+  private createTrophy(): Mesh {
+    const scene = this.scene;
+    const profile = [
+      [0, 0], [0.85, 0], [0.85, 0.22], [0.55, 0.3], [0.55, 0.42], [0.22, 0.52], [0.16, 1.05], [0.3, 1.2],
+      [0.78, 1.38], [1.02, 1.9], [1.08, 2.45], [0.98, 2.45], [0.9, 1.95], [0.68, 1.5], [0, 1.42],
+    ].map(([r, y]) => new Vector3(r, y, 0));
+    const cup = MeshBuilder.CreateLathe("trophyCup", { shape: profile, tessellation: 40 }, scene);
+    const handles = [-1, 1].map((s) => {
+      const handle = MeshBuilder.CreateTorus("trophyHandle", { diameter: 0.75, thickness: 0.13, tessellation: 28 }, scene);
+      handle.rotation.x = Math.PI / 2;
+      handle.position.set(s * 1.05, 1.88, 0);
+      return handle;
+    });
+    const trophy = Mesh.MergeMeshes([cup, ...handles], true, true)!;
+    trophy.name = "trophy";
+    const gold = new StandardMaterial("trophyGold", scene);
+    gold.diffuseColor = new Color3(1, 0.76, 0.15);
+    gold.specularColor = new Color3(1, 0.95, 0.6);
+    gold.specularPower = 24;
+    // Bright at night too: the cup carries its own glow.
+    gold.emissiveColor = new Color3(0.45, 0.32, 0.04);
+    trophy.material = gold;
+    trophy.scaling.setAll(1.6);
+    trophy.applyFog = false;
+    trophy.isPickable = false;
+    trophy.setEnabled(false);
+    return trophy;
   }
 
   /** Rides the track 7 m behind the player: as smooth as the spline, never left behind by a boost. */
@@ -483,8 +823,9 @@ export class World {
     const d = this.motoDist[0];
     const behind = this.track.positionAt(d - 7, LANE_OFFSETS[0]).pos;
     const { pos, heading } = this.track.positionAt(d, LANE_OFFSETS[0]);
-    this.camera.position.set(behind.x, 3, behind.z);
-    this.camTarget.set(pos.x + Math.sin(heading) * 6, 1.2, pos.z + Math.cos(heading) * 6);
+    this.camera.position.set(behind.x, behind.y + 3, behind.z);
+    const ahead = this.track.positionAt(d + 6, LANE_OFFSETS[0]).pos;
+    this.camTarget.set(pos.x + Math.sin(heading) * 6, ahead.y + 1.2, pos.z + Math.cos(heading) * 6);
     this.camera.fov = BASE_FOV + (0.15 * this.boostRemaining) / BOOST_SECONDS;
   }
 
@@ -498,9 +839,8 @@ export class World {
     o.x += (7 * Math.sin(angle) - o.x) * k;
     o.y += (2.2 - o.y) * k;
     o.z += (7 * Math.cos(angle) - o.z) * k;
-    // Track height is 0, so the offset's y is the camera height.
-    this.camera.position.set(pos.x + o.x, o.y, pos.z + o.z);
-    this.camTarget.set(pos.x, 1, pos.z);
+    this.camera.position.set(pos.x + o.x, pos.y + o.y, pos.z + o.z);
+    this.camTarget.set(pos.x, pos.y + 1, pos.z);
     this.camera.fov = BASE_FOV;
   }
 
@@ -523,20 +863,35 @@ export class World {
   }
 
   /** `props`: ground positions of the circuit props, kept clear of vegetation. */
-  private buildScenery(theme: SceneryTheme, assets: Assets, props: readonly Vector3[]): void {
+  private buildScenery(scenery: Scenery, props: readonly Vector3[]): void {
     const scene = this.scene;
+    const terrain = this.track.terrain;
     const rand = mulberry32(42);
 
-    // Sky dome: zenith → horizon gradient on the upper half, horizon colour below.
-    const skyTex = new DynamicTexture("skyTex", { width: 4, height: 256 }, scene, false);
+    // Sky dome: zenith → horizon gradient on the upper half, horizon colour below; stars at night.
+    const lighting = scenery.lighting ?? "day";
+    const night = lighting === "night";
+    const skyW = night ? 2048 : 4;
+    const skyH = night ? 1024 : 256;
+    const skyTex = new DynamicTexture("skyTex", { width: skyW, height: skyH }, scene, false);
     const skyCtx = skyTex.getContext();
-    const gradient = skyCtx.createLinearGradient(0, 0, 0, 128);
-    gradient.addColorStop(0, css(theme.skyZenith));
-    gradient.addColorStop(1, css(theme.skyHorizon));
+    const gradient = skyCtx.createLinearGradient(0, 0, 0, skyH / 2);
+    gradient.addColorStop(0, css(scenery.skyZenith));
+    gradient.addColorStop(1, css(scenery.skyHorizon));
     skyCtx.fillStyle = gradient;
-    skyCtx.fillRect(0, 0, 4, 128);
-    skyCtx.fillStyle = css(theme.skyHorizon);
-    skyCtx.fillRect(0, 128, 4, 128);
+    skyCtx.fillRect(0, 0, skyW, skyH / 2);
+    skyCtx.fillStyle = css(scenery.skyHorizon);
+    skyCtx.fillRect(0, skyH / 2, skyW, skyH / 2);
+    if (night) {
+      const starRand = mulberry32(5);
+      for (let k = 0; k < 1500; k++) {
+        skyCtx.fillStyle = `rgba(255,255,240,${(0.35 + 0.65 * starRand()).toFixed(2)})`;
+        const size = starRand() < 0.06 ? 2 : 1;
+        // Rows near the top pole are squeezed together on the sphere: fewer stars there.
+        const row = (skyH / 2) * (0.12 + 0.8 * Math.sqrt(starRand()));
+        skyCtx.fillRect(Math.floor(starRand() * skyW), Math.floor(row), size, size);
+      }
+    }
     skyTex.update(false); // canvas top must map to the sphere's top pole
     const sky = MeshBuilder.CreateSphere("sky", { diameter: 1800, segments: 32, sideOrientation: Mesh.BACKSIDE }, scene);
     const skyMat = new StandardMaterial("skyMat", scene);
@@ -550,27 +905,85 @@ export class World {
     sky.applyFog = false;
     sky.isPickable = false;
 
+    // Sunset sun with its halo / night moon, on the dome at the sun's azimuth (hills may hide the sun).
+    if (lighting !== "day") {
+      const azimuth = ((scenery.sunAzimuth ?? DEFAULT_SUN_AZIMUTH) * Math.PI) / 180;
+      const elevation = ((night ? MOON_ELEVATION : SUN_DISC_ELEVATION) * Math.PI) / 180;
+      const disc = MeshBuilder.CreatePlane("sunDisc", { size: night ? 70 : 300 }, scene);
+      disc.billboardMode = Mesh.BILLBOARDMODE_ALL;
+      disc.position.set(
+        SKY_OBJECT_DISTANCE * Math.sin(azimuth) * Math.cos(elevation),
+        SKY_OBJECT_DISTANCE * Math.sin(elevation),
+        SKY_OBJECT_DISTANCE * Math.cos(azimuth) * Math.cos(elevation),
+      );
+      disc.infiniteDistance = true;
+      disc.applyFog = false;
+      disc.isPickable = false;
+      const stops: readonly (readonly [number, string])[] = night
+        ? [
+            [0, "rgba(255,255,255,1)"],
+            [0.55, "rgba(255,255,255,1)"],
+            [0.62, "rgba(255,255,255,0.25)"],
+            [1, "rgba(255,255,255,0)"],
+          ]
+        : [
+            [0, "rgba(255,255,255,1)"],
+            [0.16, "rgba(255,255,255,1)"],
+            [0.2, "rgba(255,255,255,0.5)"],
+            [0.45, "rgba(255,255,255,0.18)"],
+            [1, "rgba(255,255,255,0)"],
+          ];
+      disc.material = additiveMaterial(
+        scene,
+        "sunDiscMat",
+        glowTexture(scene, "sunDiscTex", stops),
+        night ? new Color3(0.85, 0.88, 0.95) : new Color3(1, 0.82, 0.5),
+      );
+    }
+
     // Mown-grass ground: speckles and two mowing bands.
     const grassTex = new DynamicTexture("grassTex", { width: 512, height: 512 }, scene, true);
     const ctx = grassTex.getContext();
-    ctx.fillStyle = css(theme.grassBase);
+    ctx.fillStyle = css(scenery.grassBase);
     ctx.fillRect(0, 0, 512, 512);
-    ctx.fillStyle = css(theme.grassBase, 1.06);
+    ctx.fillStyle = css(scenery.grassBase, 1.06);
     ctx.fillRect(256, 0, 256, 512);
     for (let k = 0; k < 6000; k++) {
-      const c = theme.grassSpeckles[Math.floor(rand() * theme.grassSpeckles.length)];
+      const c = scenery.grassSpeckles[Math.floor(rand() * scenery.grassSpeckles.length)];
       ctx.fillStyle = css(c, rand() < 0.5 ? 1 : 1.06);
       ctx.fillRect(Math.floor(rand() * 511), Math.floor(rand() * 511), 2, 2);
     }
     grassTex.update();
-    grassTex.uScale = 100;
-    grassTex.vScale = 100;
-    const ground = MeshBuilder.CreateGround("ground", { width: 1600, height: 1600 }, scene);
+    // UVs are in 16 m units (see below): one texture repeat per 16 m.
+    grassTex.uScale = 1;
+    grassTex.vScale = 1;
+    const ground = new Mesh("ground", scene);
+    const { peak, rock } = this.buildGround(ground, scenery);
+    this.orbitHeight = Math.max(90, peak + 40);
     const groundMat = new StandardMaterial("groundMat", scene);
     groundMat.diffuseTexture = grassTex;
-    groundMat.emissiveColor = new Color3(0.08, 0.18, 0.06);
+    groundMat.emissiveColor = new Color3(...scenery.grassBase).scale(GROUND_GLOW);
     groundMat.specularColor = Color3.Black();
     ground.material = groundMat;
+    if (rock) rock.material = groundMat;
+    // Tunnel shells: same material and tint as the ground around them. Canyon arches: the same faceted
+    // rock as the canyon's walls (its tint, face-projected texture).
+    const covers = [
+      ...this.track.groundCovers.map((mesh) => ({ mesh, color: null, faceted: false })),
+      ...this.track.rockCovers.map((c) => ({ ...c, faceted: true })),
+    ];
+    for (const { mesh, color, faceted } of covers) {
+      mesh.material = groundMat;
+      const pos = mesh.getVerticesData(VertexBuffer.PositionKind)!;
+      if (faceted) mesh.setVerticesData(VertexBuffer.UVKind, faceUVs(pos, mesh.getIndices()!));
+      const colors: number[] = [];
+      for (let k = 0; k < pos.length; k += 3) {
+        const tint = groundTint(scenery, terrain, pos[k], pos[k + 1], pos[k + 2], color);
+        if (!tint) break;
+        colors.push(...tint, 1);
+      }
+      if (colors.length > 0) mesh.setVerticesData(VertexBuffer.ColorKind, colors);
+    }
     ground.isPickable = false;
     ground.receiveShadows = true;
     ground.freezeWorldMatrix();
@@ -598,26 +1011,35 @@ export class World {
     blob.isPickable = false;
     const blobRadius: Partial<Record<string, number>> = { treeRound: 0.35, treeTall: 0.35, treeSmall: 0.35, bush: 0.6 };
 
-    // Vegetation: rejection-sampled away from the track and other props.
-    const centerline = this.track.points;
-    const placed: Vector3[] = props.slice();
+    // Vegetation: rejection-sampled away from the track, the rock over tunnels, water, cuts and other props.
+    const roadGrid = new PlanGrid(16);
+    const tunnelGrid = new PlanGrid(16);
+    this.track.points.forEach((p, i) => {
+      roadGrid.add(p.x, p.z);
+      if (this.track.support[i] === "tunnel") tunnelGrid.add(p.x, p.z);
+    });
+    const placed = new PlanGrid(PROP_SPACING);
+    for (const p of props) placed.add(p.x, p.z);
+    const maxAttempts = Math.max(10000, 25 * scenery.vegetation.reduce((s, v) => s + v.count, 0));
     let attempts = 0;
-    for (const veg of theme.vegetation) {
-      const prefab = assets.prefabs[veg.prefab];
-      const clearSq = veg.clearance * veg.clearance;
-      for (let n = 0; n < veg.count && attempts < 10000; attempts++) {
+    for (const veg of scenery.vegetation) {
+      const prefab = this.assets.prefabs[veg.prefab];
+      const spacing = veg.spacing ?? PROP_SPACING;
+      for (let n = 0; n < veg.count && attempts < maxAttempts; attempts++) {
         const x = (rand() * 2 - 1) * 300;
         const z = (rand() * 2 - 1) * 300;
         const height = veg.height[0] + rand() * (veg.height[1] - veg.height[0]);
         const yaw = rand() * Math.PI * 2;
-        if (centerline.some((p) => (p.x - x) ** 2 + (p.z - z) ** 2 < clearSq)) continue;
-        if (placed.some((p) => (p.x - x) ** 2 + (p.z - z) ** 2 < PROP_SPACING * PROP_SPACING)) continue;
-        place(prefab, x, z, yaw, new Vector3(height, height, height));
-        placed.push(new Vector3(x, 0, z));
+        if (roadGrid.near(x, z, veg.clearance) || tunnelGrid.near(x, z, TUNNEL_CLEARANCE) || placed.near(x, z, spacing)) continue;
+        if (terrain.reshaped(x, z)) continue;
+        if (insideBuildings(scenery.buildings ?? [], x, z, spacing / 2)) continue;
+        const y = terrain.height(x, z);
+        place(prefab, x, y, z, yaw, new Vector3(height, height, height));
+        placed.add(x, z);
         const r = blobRadius[veg.prefab];
         if (r !== undefined) {
           const s = r * height;
-          blob.thinInstanceAdd(Matrix.Compose(new Vector3(s, 1, s), Quaternion.Identity(), new Vector3(x, 0.05, z)), false);
+          blob.thinInstanceAdd(Matrix.Compose(new Vector3(s, 1, s), Quaternion.Identity(), new Vector3(x, y + 0.05, z)), false);
         }
         n++;
       }
@@ -629,44 +1051,193 @@ export class World {
     } else blob.setEnabled(false);
 
     // Hills on the horizon.
-    const hillMat = flatMaterial(scene, "hillMat", new Color3(...theme.hill));
+    const hillMat = flatMaterial(scene, "hillMat", new Color3(...scenery.hill));
     for (let k = 0; k < 8; k++) {
       const angle = (k / 8) * Math.PI * 2 + rand() * 0.5;
       const dist = 330 + rand() * 90;
       const radius = 60 + rand() * 30;
+      const hx = Math.cos(angle) * dist;
+      const hz = Math.sin(angle) * dist;
+      // No islands in the sea, no hills in a canyon.
+      if (terrain.shoreDistance(hx, hz) < radius || terrain.reshaped(hx, hz)) continue;
       const hill = MeshBuilder.CreateSphere(`hill${k}`, { diameter: radius * 2, segments: 16 }, scene);
       hill.material = hillMat;
       hill.scaling.y = 0.35;
-      hill.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+      hill.position.set(hx, terrain.height(hx, hz), hz);
       hill.isPickable = false;
       hill.freezeWorldMatrix();
     }
 
-    // Clouds.
-    const cloudMat = new StandardMaterial("cloudMat", scene);
-    cloudMat.diffuseColor = Color3.Black();
-    cloudMat.specularColor = Color3.Black();
-    cloudMat.emissiveColor = new Color3(1, 1, 1);
-    cloudMat.disableLighting = true;
-    const puff = MeshBuilder.CreateSphere("cloudPuff", { diameter: 1, segments: 10 }, scene);
-    puff.material = cloudMat;
-    puff.applyFog = false;
-    let puffs = 0;
-    for (let c = 0; c < 12; c++) {
-      const cx = (rand() * 2 - 1) * 400;
-      const cz = (rand() * 2 - 1) * 400;
-      // Above the intro/menu orbit cameras (y ≤ 120) so no puff fills the screen.
-      const cy = 140 + rand() * 30;
-      const count = 3 + Math.floor(rand() * 2);
-      for (let k = 0; k < count; k++) {
-        const inst = puffs === 0 ? puff : puff.createInstance(`cloudPuff${puffs}`);
-        const size = 14 + rand() * 10;
-        inst.position.set(cx + (k - count / 2) * 9 + rand() * 4, cy + rand() * 4, cz + (rand() - 0.5) * 8);
-        inst.scaling.set(size, size * 0.6, size);
-        inst.isPickable = false;
-        inst.freezeWorldMatrix();
-        puffs++;
+    // Clouds (none at night: stars instead), tinted by the low sun at sunset.
+    if (!night) {
+      const cloudMat = new StandardMaterial("cloudMat", scene);
+      cloudMat.diffuseColor = Color3.Black();
+      cloudMat.specularColor = Color3.Black();
+      cloudMat.emissiveColor = lighting === "sunset" ? new Color3(1, 0.8, 0.68) : new Color3(1, 1, 1);
+      cloudMat.disableLighting = true;
+      const puff = MeshBuilder.CreateSphere("cloudPuff", { diameter: 1, segments: 10 }, scene);
+      puff.material = cloudMat;
+      puff.applyFog = false;
+      let puffs = 0;
+      for (let c = 0; c < 12; c++) {
+        const cx = (rand() * 2 - 1) * 400;
+        const cz = (rand() * 2 - 1) * 400;
+        // Above the intro/menu orbit cameras (y ≤ orbitHeight + 30) so no puff fills the screen.
+        const cy = this.orbitHeight + 50 + rand() * 30;
+        const count = 3 + Math.floor(rand() * 2);
+        for (let k = 0; k < count; k++) {
+          const inst = puffs === 0 ? puff : puff.createInstance(`cloudPuff${puffs}`);
+          const size = 14 + rand() * 10;
+          inst.position.set(cx + (k - count / 2) * 9 + rand() * 4, cy + rand() * 4, cz + (rand() - 0.5) * 8);
+          inst.scaling.set(size, size * 0.6, size);
+          inst.isPickable = false;
+          inst.freezeWorldMatrix();
+          puffs++;
+        }
       }
     }
+  }
+
+  /**
+   * Fills `ground` with the terrain on a graded grid (4 m cells where the circuit is, 32 m further
+   * out), without the strip over tunnels, tinted (shores, snow: see groundTint), and builds the water
+   * surface over the cells dug below its level. Canyon rock (every triangle touching a cut's floor,
+   * walls or mesas) goes to a separate flat-shaded `rock` mesh with jittered vertices: faceted like the
+   * arches, with a crisp edge on the sand. Returns the highest point within 300 m of the centre.
+   */
+  private buildGround(ground: Mesh, scenery: Scenery): { peak: number; rock: Mesh | null } {
+    const terrain = this.track.terrain;
+    const axis: number[] = [];
+    for (let v = -800; v <= -288; v += 32) axis.push(v);
+    for (let v = -256; v <= 252; v += 4) axis.push(v);
+    for (let v = 256; v <= 800; v += 32) axis.push(v);
+    const last = axis.length - 1;
+    // Rows run +z → −z, columns −x → +x (CreateGroundVertexData's layout and winding).
+    const data = VertexData.CreateGround({ width: 1600, height: 1600, subdivisionsX: last, subdivisionsY: last });
+    const positions = data.positions as number[];
+    const uvs = data.uvs as number[];
+    const colors: number[] = [];
+    /** Vertices in a tunnel's tube away from its portals: triangles touching one would poke into it. */
+    const inTube: boolean[] = [];
+    /** Per vertex: the rock colour of the cut there, or null. */
+    const rockColor: (Rgb | null)[] = [];
+    let peak = -Infinity;
+    for (let row = 0; row <= last; row++) {
+      for (let col = 0; col <= last; col++) {
+        const v = row * (last + 1) + col;
+        let x = axis[col];
+        let z = axis[last - row];
+        const rock = terrain.rockAt(x, z);
+        rockColor[v] = rock;
+        if (rock && terrain.groundDistance(x, z) > ROCK_JITTER_CLEAR) {
+          // Seeded by the vertex index: the same facets on every build.
+          const jitter = (k: number): number => {
+            const h = Math.sin(v * 12.9898 + k * 78.233) * 43758.5453;
+            return (h - Math.floor(h) - 0.5) * 2 * ROCK_JITTER;
+          };
+          x += jitter(1);
+          z += jitter(2);
+        }
+        const tunnel = terrain.tunnelAt(x, z);
+        let y = terrain.height(x, z);
+        // Near a portal the ground stays (see Terrain.tunnelAt); inside the tube pull it under the
+        // road, else the higher ground before a dipping road pokes through it.
+        if (tunnel && !tunnel.interior && tunnel.distance <= TUBE_HALF_WIDTH) y = Math.min(y, tunnel.roadY - TUNNEL_FLOOR_SINK);
+        inTube[v] = tunnel !== null && tunnel.interior && tunnel.distance <= TUBE_HALF_WIDTH + 1;
+        positions[3 * v] = x;
+        positions[3 * v + 1] = y;
+        positions[3 * v + 2] = z;
+        uvs[2 * v] = x / 16;
+        uvs[2 * v + 1] = z / 16;
+        if (Math.abs(x) <= 300 && Math.abs(z) <= 300) peak = Math.max(peak, y);
+        const tint = groundTint(scenery, terrain, x, y, z, null);
+        if (tint) colors.push(...tint, 1);
+      }
+    }
+    const indices = data.indices as number[];
+    const kept: number[] = [];
+    const rockTris: number[] = [];
+    for (let k = 0; k < indices.length; k += 3) {
+      const [a, b, c] = [indices[k], indices[k + 1], indices[k + 2]];
+      const cx = (positions[3 * a] + positions[3 * b] + positions[3 * c]) / 3;
+      const cz = (positions[3 * a + 2] + positions[3 * b + 2] + positions[3 * c + 2]) / 3;
+      // Over a tunnel the shell replaces the ground.
+      if (inTube[a] || inTube[b] || inTube[c] || terrain.tunnelAt(cx, cz)?.interior) continue;
+      (rockColor[a] || rockColor[b] || rockColor[c] ? rockTris : kept).push(a, b, c);
+    }
+    data.indices = kept;
+    const normals: number[] = [];
+    VertexData.ComputeNormals(positions, kept, normals);
+    data.normals = normals;
+    if (colors.length > 0) data.colors = colors;
+    data.applyToMesh(ground);
+    if (scenery.water) this.buildWater(scenery.water, axis, positions);
+    if (rockTris.length === 0) return { peak, rock: null };
+
+    // Rock: no shared vertices, so every triangle shows its own facet (face normals, face-projected texture).
+    const rockData = new VertexData();
+    const rockPositions = rockTris.flatMap((v) => [positions[3 * v], positions[3 * v + 1], positions[3 * v + 2]]);
+    const rockIndices = rockTris.map((_, k) => k);
+    const rockNormals: number[] = [];
+    VertexData.ComputeNormals(rockPositions, rockIndices, rockNormals);
+    const rockColors: number[] = [];
+    rockTris.forEach((v, k) => {
+      const [x, y, z] = [rockPositions[3 * k], rockPositions[3 * k + 1], rockPositions[3 * k + 2]];
+      // A sand vertex of a rock triangle (at the cliff foot) takes the triangle's rock colour.
+      const t = k - (k % 3);
+      const color = rockColor[v] ?? rockColor[rockTris[t]] ?? rockColor[rockTris[t + 1]] ?? rockColor[rockTris[t + 2]];
+      rockColors.push(...groundTint(scenery, terrain, x, y, z, color)!, 1);
+    });
+    rockData.positions = rockPositions;
+    rockData.indices = rockIndices;
+    rockData.normals = rockNormals;
+    rockData.uvs = faceUVs(rockPositions, rockIndices);
+    rockData.colors = rockColors;
+    const rock = new Mesh("groundRock", this.scene);
+    rockData.applyToMesh(rock);
+    rock.isPickable = false;
+    rock.receiveShadows = true;
+    rock.freezeWorldMatrix();
+    return { peak, rock };
+  }
+
+  /** One flat quad per run of ground grid cells (in a row) with a corner below the water's surface. */
+  private buildWater(water: Water, axis: readonly number[], positions: readonly number[]): void {
+    // Elsewhere there is no water mesh at all, so it never fights with ground near its level.
+    const last = axis.length - 1;
+    const wet: number[] = [];
+    const quads: number[] = [];
+    const yAt = (row: number, col: number): number => positions[3 * (row * (last + 1) + col) + 1];
+    for (let row = 0; row < last; row++) {
+      let start = -1;
+      for (let col = 0; col <= last; col++) {
+        const isWet =
+          col < last && Math.min(yAt(row, col), yAt(row, col + 1), yAt(row + 1, col), yAt(row + 1, col + 1)) < water.level;
+        if (isWet && start < 0) start = col;
+        if (isWet || start < 0) continue;
+        const v = wet.length / 3;
+        const [x0, x1, z0, z1] = [axis[start], axis[col], axis[last - row - 1], axis[last - row]];
+        wet.push(x0, water.level, z1, x1, water.level, z1, x1, water.level, z0, x0, water.level, z0);
+        quads.push(v, v + 1, v + 2, v, v + 2, v + 3);
+        start = -1;
+      }
+    }
+    if (quads.length === 0) return;
+    const surface = new VertexData();
+    surface.positions = wet;
+    surface.indices = quads;
+    surface.normals = wet.map((_, k) => (k % 3 === 1 ? 1 : 0));
+    const waterMesh = new Mesh("water", this.scene);
+    surface.applyToMesh(waterMesh);
+    const waterMat = new StandardMaterial("waterMat", this.scene);
+    waterMat.diffuseColor = new Color3(...water.color);
+    waterMat.emissiveColor = new Color3(...water.color).scale(0.3);
+    waterMat.specularColor = new Color3(0.6, 0.6, 0.6);
+    waterMat.specularPower = 48;
+    waterMat.alpha = WATER_ALPHA;
+    waterMat.backFaceCulling = false;
+    waterMesh.material = waterMat;
+    waterMesh.isPickable = false;
+    waterMesh.freezeWorldMatrix();
   }
 }

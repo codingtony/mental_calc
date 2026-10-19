@@ -78,23 +78,34 @@
         <input id="name" maxlength="16" autocomplete="off" data-i18n-placeholder="namePlaceholder" />
         <p id="name-error" class="error"></p>
 
-        <p class="field-label" data-i18n="categoryLabel"></p>
+        <p class="field-label" data-i18n="modeLabel"></p>
         <div class="choices">
-          <button class="choice" data-category="10"><span>10</span><small data-i18n="questionsWord"></small></button>
-          <button class="choice" data-category="30"><span>30</span><small data-i18n="questionsWord"></small></button>
-          <button class="choice" data-category="50"><span>50</span><small data-i18n="questionsWord"></small></button>
-          <button class="choice" data-category="120"><span>120</span><small data-i18n="questionsWord"></small></button>
+          <button class="choice" data-mode="single" data-i18n="modeSingle"></button>
+          <button class="choice" data-mode="championship" data-i18n="modeChampionship"></button>
         </div>
 
-        <p class="field-label" data-i18n="difficultyLabel"></p>
-        <div class="choices">
-          <button class="choice" data-difficulty="easy"><span data-i18n="easy"></span><small></small></button>
-          <button class="choice" data-difficulty="medium"><span data-i18n="medium"></span><small></small></button>
-          <button class="choice" data-difficulty="hard"><span data-i18n="hard"></span><small></small></button>
-        </div>
+        <div id="setup-race-options">
+          <p class="field-label" data-i18n="categoryLabel"></p>
+          <div class="choices">
+            <button class="choice" data-category="10"><span>10</span><small data-i18n="questionsWord"></small></button>
+            <button class="choice" data-category="30"><span>30</span><small data-i18n="questionsWord"></small></button>
+            <button class="choice" data-category="50"><span>50</span><small data-i18n="questionsWord"></small></button>
+            <button class="choice" data-category="120"><span>120</span><small data-i18n="questionsWord"></small></button>
+          </div>
 
-        <button id="next-btn" class="big-btn" data-i18n="next"></button>
-        <button id="setup-back" class="secondary-btn" data-i18n="back"></button>
+          <p class="field-label" data-i18n="difficultyLabel"></p>
+          <div class="choices">
+            <button class="choice" data-difficulty="easy"><span data-i18n="easy"></span><small></small></button>
+            <button class="choice" data-difficulty="medium"><span data-i18n="medium"></span><small></small></button>
+            <button class="choice" data-difficulty="hard"><span data-i18n="hard"></span><small></small></button>
+          </div>
+        </div>
+        <p id="setup-champ-info" class="subtle hidden"></p>
+
+        <div class="choices">
+          <button id="next-btn" class="big-btn" data-i18n="next"></button>
+          <button id="setup-back" class="secondary-btn" data-i18n="back"></button>
+        </div>
       </div>
     </section>
 
@@ -148,6 +159,8 @@
           </div>
           <p class="field-label" data-i18n="mpRace"></p>
           <div class="host-settings">
+            <label class="field-label" for="host-scenery" data-i18n="sceneryLabel"></label>
+            <select id="host-scenery"></select>
             <span class="field-label" data-i18n="cupLabel"></span>
             <div class="choices compact">
               <button class="choice" data-host-cup="add"></button>
@@ -214,6 +227,7 @@
       </div>
       <div id="position"></div>
       <div id="race-info">
+        <div id="race-name"></div>
         <div id="timer"></div>
         <div id="goal-time"></div>
         <div id="lap"></div>
@@ -232,10 +246,12 @@
     <div id="countdown" class="hidden">
       <div class="lights"><span></span><span></span><span></span></div>
       <div id="countdown-text"></div>
-      <div id="countdown-hint" data-i18n="targetHint"></div>
+      <div id="countdown-hint"></div>
     </div>
 
     <div id="banner" class="hidden"></div>
+    <div id="trophy-title" class="hidden"></div>
+    <div id="track-map" class="hidden"></div>
 
     <div id="mp-offline" class="hidden" data-i18n="mpReconnecting"></div>
 
@@ -249,6 +265,7 @@
           <button class="tab" data-board="last" data-i18n="lastGames"></button>
           <button class="tab" data-board="high" data-i18n="highScores"></button>
         </div>
+        <p id="champ-board-title" class="field-label hidden" data-i18n="champRecords"></p>
         <div id="board-box" class="scroll-box">
           <button id="board-less" class="more-hint up hidden" aria-hidden="true" tabindex="-1">▲</button>
           <div class="board-wrap"><table id="board"></table></div>
@@ -256,6 +273,7 @@
         </div>
         <div class="choices">
           <button id="again-btn" class="big-btn" data-i18n="raceAgain"></button>
+          <button id="champ-next-btn" class="big-btn hidden" data-i18n="champNext"></button>
           <button id="cups-btn" class="secondary-btn" data-i18n="changeCup"></button>
           <button id="menu-btn" class="secondary-btn" data-i18n="menu"></button>
           <button id="mp-leave-btn" class="secondary-btn hidden" data-i18n="mpLeave"></button>

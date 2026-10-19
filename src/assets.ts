@@ -4,6 +4,7 @@ import {
   LoadAssetContainerAsync,
   Matrix,
   Mesh,
+  MeshBuilder,
   PBRMaterial,
   Quaternion,
   Scene,
@@ -13,7 +14,7 @@ import {
   VertexData,
 } from "@babylonjs/core";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
-import type { RiderBody } from "./look";
+import type { Rgb, RiderBody } from "./look";
 import motoUrl from "./assets/models/moto.glb?url&no-inline";
 import riderGirlUrl from "./assets/models/rider-girl.glb?url&no-inline";
 import riderBoyUrl from "./assets/models/rider-boy.glb?url&no-inline";
@@ -31,6 +32,15 @@ import flagCheckersUrl from "./assets/models/flag-checkers.glb?url&no-inline";
 import barrierRedUrl from "./assets/models/barrier-red.glb?url&no-inline";
 import barrierWhiteUrl from "./assets/models/barrier-white.glb?url&no-inline";
 import gantryUrl from "./assets/models/gantry.glb?url&no-inline";
+import palmTallUrl from "./assets/models/palm-tall.glb?url&no-inline";
+import palmBendUrl from "./assets/models/palm-bend.glb?url&no-inline";
+import cactusTallUrl from "./assets/models/cactus-tall.glb?url&no-inline";
+import cactusShortUrl from "./assets/models/cactus-short.glb?url&no-inline";
+import pineTallUrl from "./assets/models/pine-tall.glb?url&no-inline";
+import pineRoundUrl from "./assets/models/pine-round.glb?url&no-inline";
+import treeSnowUrl from "./assets/models/tree-snow.glb?url&no-inline";
+import snowmanUrl from "./assets/models/snowman.glb?url&no-inline";
+import streetLampUrl from "./assets/models/street-lamp.glb?url&no-inline";
 
 // Lazy-loads the glTF plugin chunk on first use.
 registerBuiltInLoaders();
@@ -50,9 +60,31 @@ const PREFAB_URLS = {
   barrierRed: barrierRedUrl,
   barrierWhite: barrierWhiteUrl,
   gantry: gantryUrl,
+  palmTall: palmTallUrl,
+  palmBend: palmBendUrl,
+  cactusTall: cactusTallUrl,
+  cactusShort: cactusShortUrl,
+  pineTall: pineTallUrl,
+  pineRound: pineRoundUrl,
+  treeSnow: treeSnowUrl,
+  snowman: snowmanUrl,
+  streetLamp: streetLampUrl,
 } as const;
 
-export type PrefabKey = keyof typeof PREFAB_URLS;
+/** Prefabs built in code rather than loaded from a glTF. */
+type ProceduralKey = "igloo";
+
+export type PrefabKey = keyof typeof PREFAB_URLS | ProceduralKey;
+
+/**
+ * streetLamp in prefab units (height 1, unrotated): the pole stands at (0, 0, STREET_LAMP_POLE_Z) and the
+ * curved arm reaches towards −z; the lamp head's underside (bulb) is at STREET_LAMP_BULB, i.e.
+ * STREET_LAMP_REACH = 0.222 units past the pole at 96.7 % of the height. Multiply by the placement scale
+ * (and rotate by rotY) to get world offsets from the placement point; place the lamp with −z facing the road.
+ */
+export const STREET_LAMP_BULB = new Vector3(0, 0.967, -0.093);
+export const STREET_LAMP_POLE_Z = 0.13;
+export const STREET_LAMP_REACH = STREET_LAMP_POLE_Z - STREET_LAMP_BULB.z;
 
 /** Static model merged into one mesh, normalised to height 1 with its base centred on the origin. */
 export interface Prefab {
@@ -113,8 +145,22 @@ const SRGB_FACTORS: Partial<Record<PrefabKey, true>> = {
   gantry: true,
 };
 
+/**
+ * Material colours (sRGB, by glTF material name) replacing the authored ones: the Nature Kit files
+ * ship mint/teal foliage (leafsGreen 0.16 0.79 0.67, leafsDark 0.17 0.65 0.67) and orange bark,
+ * which do not read as forest, palms or cacti.
+ */
+const MATERIAL_COLORS: Partial<Record<PrefabKey, Record<string, Rgb>>> = {
+  palmTall: { leafsGreen: [0.25, 0.55, 0.2], woodBark: [0.5, 0.34, 0.2] },
+  palmBend: { leafsGreen: [0.25, 0.55, 0.2], woodBark: [0.5, 0.34, 0.2] },
+  pineTall: { leafsDark: [0.13, 0.36, 0.17], woodBarkDark: [0.36, 0.24, 0.15] },
+  pineRound: { leafsDark: [0.13, 0.36, 0.17], woodBarkDark: [0.36, 0.24, 0.15] },
+  cactusTall: { leafsGreen: [0.33, 0.55, 0.27] },
+  cactusShort: { leafsGreen: [0.33, 0.55, 0.27] },
+};
+
 export async function loadAssets(scene: Scene): Promise<Assets> {
-  const keys = Object.keys(PREFAB_URLS) as PrefabKey[];
+  const keys = Object.keys(PREFAB_URLS) as (keyof typeof PREFAB_URLS)[];
   const [moto, girl, boy, ...props] = await Promise.all([
     load(motoUrl, scene),
     load(riderGirlUrl, scene),
@@ -125,9 +171,10 @@ export async function loadAssets(scene: Scene): Promise<Assets> {
   standardizeMaterials(boy, scene, false);
   const prefabs = {} as Record<PrefabKey, Prefab>;
   keys.forEach((k, i) => {
-    standardizeMaterials(props[i], scene, SRGB_FACTORS[k] === true);
+    standardizeMaterials(props[i], scene, SRGB_FACTORS[k] === true, MATERIAL_COLORS[k]);
     prefabs[k] = buildPrefab(props[i], k);
   });
+  prefabs.igloo = buildIgloo(scene);
   return { prefabs, moto: buildMotoTemplate(moto), riders: { girl, boy } };
 }
 
@@ -135,12 +182,22 @@ export async function loadAssets(scene: Scene): Promise<Assets> {
  * Swaps PBR materials for flat StandardMaterials of the same name: there is no environment
  * map in this game, and PBR without one renders dark next to the procedural track.
  */
-function standardizeMaterials(container: AssetContainer, scene: Scene, srgbFactors: boolean): void {
+function standardizeMaterials(
+  container: AssetContainer,
+  scene: Scene,
+  srgbFactors: boolean,
+  colors: Record<string, Rgb> = {},
+): void {
   for (const pbr of container.materials.slice()) {
     if (!(pbr instanceof PBRMaterial)) continue;
     const mat = new StandardMaterial(pbr.name, scene);
     scene.removeMaterial(mat); // belongs to the container, not the scene, until added
-    mat.diffuseColor = srgbFactors ? pbr.albedoColor.clone() : pbr.albedoColor.toGammaSpace();
+    const color = colors[pbr.name];
+    mat.diffuseColor = color
+      ? new Color3(...color)
+      : srgbFactors
+        ? pbr.albedoColor.clone()
+        : pbr.albedoColor.toGammaSpace();
     mat.diffuseTexture = pbr.albedoTexture;
     mat.specularColor = Color3.Black();
     mat.emissiveColor = mat.diffuseColor.scale(0.15);
@@ -154,9 +211,14 @@ function buildPrefab(container: AssetContainer, name: string): Prefab {
   container.addAllToScene();
   const parts = container.meshes.filter((m): m is Mesh => m instanceof Mesh && m.getTotalVertices() > 0);
   const mesh = Mesh.MergeMeshes(parts, true, true, undefined, false, true)!;
-  mesh.name = name;
   for (const m of container.meshes) if (!m.isDisposed()) m.dispose(false, false);
   for (const n of container.transformNodes) n.dispose();
+  return normalize(mesh, name);
+}
+
+/** Scales a merged mesh to height 1 with its base centred on the origin. */
+function normalize(mesh: Mesh, name: string): Prefab {
+  mesh.name = name;
   const { minimum: min, maximum: max } = mesh.getBoundingInfo().boundingBox;
   const s = 1 / (max.y - min.y);
   mesh.bakeTransformIntoVertices(
@@ -167,23 +229,60 @@ function buildPrefab(container: AssetContainer, name: string): Prefab {
   return { mesh, size: max.subtract(min).scale(s), placed: 0 };
 }
 
-/** Adds one thin instance of a prefab standing on the ground; `scale` is in prefab units (height 1). */
-export function place(prefab: Prefab, x: number, z: number, rotY: number, scale: Vector3): void {
-  prefab.mesh.thinInstanceAdd(Matrix.Compose(scale, Quaternion.RotationYawPitchRoll(rotY, 0, 0), new Vector3(x, 0, z)), false);
+/** Gives every vertex of a builder mesh one colour (the igloo is a single vertex-coloured mesh). */
+function paint(mesh: Mesh, color: Color3): Mesh {
+  const n = mesh.getTotalVertices();
+  const colors = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) colors.set([color.r, color.g, color.b, 1], i * 4);
+  mesh.setVerticesData(VertexBuffer.ColorKind, colors);
+  return mesh;
+}
+
+/** No CC0 igloo glTF exists: a low-poly snow dome with an entrance tunnel (towards +z) and a dark doorway. */
+function buildIgloo(scene: Scene): Prefab {
+  const snow = new Color3(0.93, 0.96, 1);
+  const dome = paint(MeshBuilder.CreateSphere("iglooDome", { diameter: 2, segments: 6, slice: 0.5 }, scene), snow);
+  const tunnel = MeshBuilder.CreateCylinder(
+    "iglooTunnel",
+    { diameter: 0.9, height: 0.7, tessellation: 12, arc: 0.5, cap: Mesh.NO_CAP, sideOrientation: Mesh.DOUBLESIDE },
+    scene,
+  );
+  // Lay the half cylinder along z with its arc on top, sticking out of the dome's +z side.
+  tunnel.bakeTransformIntoVertices(Matrix.RotationX(Math.PI / 2).multiply(Matrix.Translation(0, 0, 1.05)));
+  const door = MeshBuilder.CreateDisc("iglooDoor", { radius: 0.4, tessellation: 12, arc: 0.5, sideOrientation: Mesh.DOUBLESIDE }, scene);
+  door.bakeTransformIntoVertices(Matrix.Translation(0, 0, 1.2));
+  const mesh = Mesh.MergeMeshes([dome, paint(tunnel, snow), paint(door, new Color3(0.12, 0.16, 0.24))], true, true)!;
+  mesh.convertToFlatShadedMesh();
+  const mat = new StandardMaterial("igloo", scene);
+  mat.specularColor = Color3.Black();
+  mat.emissiveColor = new Color3(0.2, 0.2, 0.22);
+  mesh.material = mat;
+  return normalize(mesh, "igloo");
+}
+
+/** Adds one thin instance of a prefab standing at (x, y, z); `scale` is in prefab units (height 1). */
+export function place(prefab: Prefab, x: number, y: number, z: number, rotY: number, scale: Vector3): void {
+  prefab.mesh.thinInstanceAdd(Matrix.Compose(scale, Quaternion.RotationYawPitchRoll(rotY, 0, 0), new Vector3(x, y, z)), false);
   prefab.placed++;
 }
 
 /** Call once after every place(): uploads instances; unused prefabs are hidden. */
 export function finishPrefabs(prefabs: Record<PrefabKey, Prefab>): void {
   for (const p of Object.values(prefabs)) {
-    if (p.placed === 0) {
-      // A thin-instance mesh without instances would render its base at the origin.
-      p.mesh.setEnabled(false);
-      continue;
-    }
+    // A thin-instance mesh without instances would render its base at the origin.
+    p.mesh.setEnabled(p.placed > 0);
+    if (p.placed === 0) continue;
     p.mesh.thinInstanceBufferUpdated("matrix");
     p.mesh.thinInstanceRefreshBoundingInfo();
     p.mesh.freezeWorldMatrix();
+  }
+}
+
+/** Drops every placed instance (scenery swap); the buffers stay allocated and place() refills them. */
+export function clearPrefabs(prefabs: Record<PrefabKey, Prefab>): void {
+  for (const p of Object.values(prefabs)) {
+    p.mesh.thinInstanceCount = 0;
+    p.placed = 0;
   }
 }
 

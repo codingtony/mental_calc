@@ -178,6 +178,7 @@ button {
 #position,
 #countdown-text,
 #banner,
+#trophy-title,
 #result-position {
   font-style: italic;
   color: var(--yellow);
@@ -628,8 +629,30 @@ button {
   font-style: italic;
 }
 
+#race-name {
+  font-size: 16px;
+}
+
 #timer {
   font-size: 30px;
+}
+
+#track-map {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 32vmin;
+  height: 32vmin;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#track-map svg {
+  width: 100%;
+  height: 100%;
 }
 
 #standings {
@@ -789,6 +812,18 @@ button {
     transform: scale(3) rotate(-10deg);
     opacity: 0;
   }
+}
+
+/* Championship won: over the spinning trophy (world "trophy" mode). */
+#trophy-title {
+  position: fixed;
+  top: 7%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: clamp(40px, 8vw, 96px);
+  pointer-events: none;
+  animation: slam 0.6s 0.9s cubic-bezier(0.2, 1.6, 0.4, 1) backwards;
 }
 
 /* ---------- Results ---------- */
@@ -1071,6 +1106,54 @@ button {
   }
 }
 
+/* Solo setup: Back sits beside Next; short screens tighten the spacing so the whole form
+   (name, mode, questions, difficulty, buttons) shows without scrolling. */
+#screen-setup .choices .secondary-btn {
+  flex: 0 0 auto;
+}
+
+/* Clear of the mode buttons' drop shadow. */
+#setup-champ-info {
+  margin: 16px 0 4px;
+}
+
+@media (max-height: 760px) {
+  #screen-setup .panel {
+    padding: 14px 20px 18px;
+  }
+
+  #screen-setup .heading {
+    font-size: 28px;
+  }
+
+  #screen-setup .field-label {
+    margin: 8px 0 4px;
+  }
+
+  #screen-setup #name {
+    padding: 7px 12px;
+  }
+
+  #screen-setup .error {
+    margin-top: 2px;
+  }
+
+  #screen-setup .choice {
+    padding: 6px;
+  }
+
+  #screen-setup .big-btn,
+  #screen-setup .secondary-btn {
+    margin-top: 12px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  #screen-setup .big-btn {
+    font-size: 22px;
+  }
+}
+
 #host-url {
   overflow-wrap: anywhere;
   color: inherit;
@@ -1121,6 +1204,18 @@ button {
 
 .host-settings .field-label {
   margin: 0;
+}
+
+#host-scenery {
+  justify-self: start;
+  min-width: 220px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 14px;
+  border: 2px solid #000;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 3px 0 #000;
 }
 
 .choices.compact {
